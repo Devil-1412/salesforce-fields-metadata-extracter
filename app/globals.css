@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+
 /* Global light theme */
 body {
   @apply bg-bg text-text font-sans min-h-screen;
