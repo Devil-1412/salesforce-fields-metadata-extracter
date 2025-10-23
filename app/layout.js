@@ -1,21 +1,19 @@
+import './globals.css';
+
 export const metadata = {
   title: 'Salesforce Metadata Extractor',
-  description: 'Connect to Salesforce and extract metadata easily',
+  description: 'Connect and explore Salesforce object metadata easily.',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body
-        style={{
-          fontFamily: "Arial, sans-serif",
-          backgroundColor: "#f9f9f9",
-          color: "#333",
-          margin: 0,
-          padding: 0,
-        }}
-      >
-        {children}
+      <body>
+        <header className="navbar">
+          <h1 className="text-xl font-bold text-primary">Salesforce Metadata Extractor</h1>
+          <a href="/" className="btn btn-secondary">Logout</a>
+        </header>
+        <main className="container">{children}</main>
       </body>
     </html>
   );
