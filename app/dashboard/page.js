@@ -8,25 +8,36 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const token = sessionStorage.getItem("accessToken");
-  const instanceUrl = sessionStorage.getItem("instanceUrl");
+  const [token, setToken] = useState("");
+  const [instanceUrl, setInstanceUrl] = useState("");
 
   useEffect(() => {
-    if (!token || !instanceUrl) return router.push("/");
+    const t = sessionStorage.getItem("accessToken");
+    const url = sessionStorage.getItem("instanceUrl");
+
+    if (!t || !url) return router.push("/"); // redirect if not logged in
+
+    setToken(t);
+    setInstanceUrl(url);
 
     const fetchObjects = async () => {
-      const res = await fetch("/api/objects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: token, instanceUrl }),
-      });
-      const data = await res.json();
-      if (data.success) setObjects(data.objects);
-      setLoading(false);
+      try {
+        const res = await fetch("/api/objects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: t, instanceUrl: url }),
+        });
+        const data = await res.json();
+        if (data.success) setObjects(data.objects);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     };
+
     fetchObjects();
-  }, [router, token, instanceUrl]);
+  }, [router]);
 
   const handleCheck = (obj) => {
     setSelected(prev =>
