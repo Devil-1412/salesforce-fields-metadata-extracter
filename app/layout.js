@@ -1,5 +1,4 @@
 import './globals.css';
-import { usePathname } from 'next/navigation';
 
 export const metadata = {
   title: 'Salesforce Metadata Extractor',
