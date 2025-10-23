@@ -4,7 +4,34 @@ import { useRouter } from "next/navigation";
 
 export default function MetadataPage() {
   const router = useRouter();
-  const [metadata, setMetadata] = useState(["label", "type", "length", "required"]);
+
+  // All possible Salesforce field metadata keys
+  const allMetadataKeys = [
+    "label",
+    "name",
+    "type",
+    "length",
+    "precision",
+    "scale",
+    "required",
+    "unique",
+    "externalId",
+    "defaultValue",
+    "autoNumber",
+    "calculatedFormula",
+    "picklistValues",
+    "relationshipName",
+    "referenceTo",
+    "updateable",
+    "createable",
+    "nillable",
+    "deprecatedAndHidden",
+  ];
+
+  // Important fields ticked by default
+  const defaultSelected = ["label", "type", "length", "required", "picklistValues"];
+
+  const [metadata, setMetadata] = useState(defaultSelected);
   const [fieldsData, setFieldsData] = useState({});
   const [selectedObject, setSelectedObject] = useState("");
   const [loading, setLoading] = useState(true);
@@ -60,11 +87,8 @@ export default function MetadataPage() {
       for (const f of fields) {
         const row = [obj, f.name];
         metadata.forEach((m) => {
-          if (m === "label") row.push(f.label);
-          else if (m === "type") row.push(f.type);
-          else if (m === "length") row.push(f.length ?? "");
-          else if (m === "required") row.push(f.required ? "Yes" : "No");
-          else if (m === "picklistValues") row.push((f.picklistValues || []).join(";"));
+          if (f[m] === undefined) row.push("");
+          else row.push(Array.isArray(f[m]) ? f[m].join("; ") : f[m].toString());
         });
         rows.push(row.join(","));
       }
@@ -96,11 +120,11 @@ export default function MetadataPage() {
 
         <div className="flex flex-col md:flex-row gap-6">
           {/* Left: Metadata checkboxes */}
-          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[500px]">
             <h4 className="text-lg font-semibold mb-3 text-gray-700">
               Show Metadata
             </h4>
-            {["label", "type", "length", "required", "picklistValues"].map((m) => (
+            {allMetadataKeys.map((m) => (
               <div key={m} className="flex items-center mb-2">
                 <input
                   type="checkbox"
@@ -108,7 +132,13 @@ export default function MetadataPage() {
                   onChange={() => toggleMetadata(m)}
                   className="mr-2 text-blue-600 focus:ring-blue-500 w-4 h-4"
                 />
-                <label className="text-gray-700 capitalize cursor-pointer">{m}</label>
+                <label
+                  className={`text-gray-700 capitalize cursor-pointer ${
+                    defaultSelected.includes(m) ? "font-semibold text-blue-600" : ""
+                  }`}
+                >
+                  {m}
+                </label>
               </div>
             ))}
           </div>
@@ -142,18 +172,10 @@ export default function MetadataPage() {
                     </td>
                     {metadata.map((m) => (
                       <td key={m} className="border border-gray-200 p-2 text-gray-700">
-                        {m === "label"
-                          ? f.label
-                          : m === "type"
-                          ? f.type
-                          : m === "length"
-                          ? f.length
-                          : m === "required"
-                          ? f.required
-                            ? "Yes"
-                            : "No"
-                          : m === "picklistValues"
-                          ? f.picklistValues.join("; ")
+                        {f[m] !== undefined
+                          ? Array.isArray(f[m])
+                            ? f[m].join("; ")
+                            : f[m].toString()
                           : ""}
                       </td>
                     ))}
