@@ -1,4 +1,3 @@
-// layout.js
 import './globals.css';
 import { usePathname } from 'next/navigation';
 
@@ -8,18 +7,19 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
-  const pathname = usePathname();
-  const showHeader = pathname !== '/';
+  const pathname = usePathname(); // ✅ inside the component
+  const isLoggedIn = !!sessionStorage.getItem("accessToken"); // check login
+  const showLogout = isLoggedIn && pathname !== "/"; // hide logout on login page
 
   return (
     <html lang="en">
       <body>
-        {showHeader && (
-          <header className="navbar">
-            <h1 className="text-xl font-bold text-primary">Salesforce Metadata Extractor</h1>
+        <header className="navbar">
+          <h1 className="text-xl font-bold text-primary">Salesforce Metadata Extractor</h1>
+          {showLogout && (
             <a href="/" className="btn btn-secondary">Logout</a>
-          </header>
-        )}
+          )}
+        </header>
         <main className="container">{children}</main>
       </body>
     </html>
