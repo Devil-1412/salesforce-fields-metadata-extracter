@@ -9,9 +9,9 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
-  const pathname = usePathname(); // ✅ inside the component
-  const isLoggedIn = !!sessionStorage.getItem("accessToken"); // check login
-  const showLogout = isLoggedIn && pathname !== "/"; // hide logout on login page
+  const pathname = usePathname();
+  const isLoggedIn = !!sessionStorage.getItem("accessToken");
+  const showLogout = isLoggedIn && pathname !== "/";
 
   return (
     <html lang="en">
