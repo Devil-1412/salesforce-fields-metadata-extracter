@@ -1,5 +1,3 @@
-'use client';
-
 import './globals.css';
 import { usePathname } from 'next/navigation';
 
@@ -9,9 +7,8 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
-  const pathname = usePathname();
   const isLoggedIn = !!sessionStorage.getItem("accessToken");
-  const showLogout = isLoggedIn && pathname !== "/";
+  const showLogout = isLoggedIn;
 
   return (
     <html lang="en">
