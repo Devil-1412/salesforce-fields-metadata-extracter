@@ -26,8 +26,10 @@ export default function LoginPage() {
     setLoading(false);
 
     if (data.success) {
-      sessionStorage.setItem("accessToken", data.accessToken);
-      sessionStorage.setItem("instanceUrl", data.instanceUrl);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("accessToken", data.accessToken);
+        sessionStorage.setItem("instanceUrl", data.instanceUrl);
+      }
       router.push("/dashboard");
     } else {
       setMessage("Login failed: " + data.error);
