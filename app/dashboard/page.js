@@ -12,8 +12,10 @@ export default function Dashboard() {
   const [instanceUrl, setInstanceUrl] = useState("");
 
   useEffect(() => {
-    const t = sessionStorage.getItem("accessToken");
-    const url = sessionStorage.getItem("instanceUrl");
+    if (typeof window !== "undefined") {
+      const t = sessionStorage.getItem("accessToken");
+      const url = sessionStorage.getItem("instanceUrl");
+    }
     if (!t || !url) return router.push("/");
     setToken(t);
     setInstanceUrl(url);
@@ -44,7 +46,9 @@ export default function Dashboard() {
 
   const handleExtract = () => {
     if (selected.length === 0) return alert("Select at least one object!");
-    sessionStorage.setItem("selectedObjects", JSON.stringify(selected));
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("selectedObjects", JSON.stringify(selected));
+    }
     router.push("/metadata");
   };
 
