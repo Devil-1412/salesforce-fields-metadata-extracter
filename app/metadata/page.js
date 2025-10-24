@@ -5,29 +5,93 @@ import { useRouter } from "next/navigation";
 export default function MetadataPage() {
   const router = useRouter();
 
+  // All metadata fields you want to extract
   const allMetadataKeys = [
-    "label",
-    "name",
+    "Field Label",
     "type",
     "length",
     "precision",
     "scale",
-    "required",
-    "unique",
-    "externalId",
+    "digits",
+    "byteLength",
+    "DBOrder",
+    "soapType",
+    "extraTypeInfo",
     "defaultValue",
-    "autoNumber",
-    "calculatedFormula",
-    "picklistValues",
-    "relationshipName",
+    "defaultValueFormula",
+    "compoundFieldName",
+    "controllerName",
+    "filteredLookupInfo",
+    "mask",
+    "maskType",
     "referenceTo",
-    "updateable",
-    "createable",
-    "nillable",
+    "referenceTargetField",
+    "relationshipName",
+    "relationshipOrder",
+    "aggregatable",
+    "aiPredictionField",
+    "autoNumber",
+    "calculated",
+    "cascadeDelete",
+    "cascadeDeleteSpecified",
+    "caseSensitive",
+    "custom",
+    "dataTranslationEnabled",
+    "dataTranslationEnabledSpecified",
+    "defaultedOnCreate",
+    "dependentPicklist",
+    "dependentPicklistSpecified",
     "deprecatedAndHidden",
+    "displayLocationInDecimal",
+    "displayLocationInDecimalSpecified",
+    "encrypted",
+    "encryptedSpecified",
+    "externalId",
+    "externalIdSpecified",
+    "filterable",
+    "formulaTreatNullNumberAsZero",
+    "formulaTreatNullNumberAsZeroSpecified",
+    "groupable",
+    "highScaleNumber",
+    "highScaleNumberSpecified",
+    "htmlFormatted",
+    "htmlFormattedSpecified",
+    "idLookup",
+    "nameField",
+    "namePointing",
+    "namePointingSpecified",
+    "permissionable",
+    "polymorphicForeignKey",
+    "queryByDistance",
+    "relationshipOrderSpecified",
+    "restrictedDelete",
+    "restrictedDeleteSpecified",
+    "restrictedPicklist",
+    "searchPrefilterable",
+    "sortable",
+    "sortableSpecified",
+    "unique",
+    "writeRequiresMasterRead",
+    "writeRequiresMasterReadSpecified",
+    "Object",
+    "API Name",
+    "Salesforce Data Type",
+    "MSSQL Data Type",
+    "Oracle Data Type",
+    "MySQL Data Type",
+    "Properties",
+    "Nullable",
+    "Createable",
+    "Updateable",
+    "On Page Layout",
+    "Picklist Values",
+    "Category",
+    "Description",
+    "Help Text",
+    "Formula"
   ];
 
-  const defaultSelected = ["label", "type", "length", "required", "picklistValues"];
+  const defaultSelected = ["Field Label", "type", "length", "required", "picklistValues"];
 
   const [metadata, setMetadata] = useState(defaultSelected);
   const [fieldsData, setFieldsData] = useState({});
@@ -87,8 +151,7 @@ export default function MetadataPage() {
       for (const f of fields) {
         const row = [obj, f.name];
         metadata.forEach((m) => {
-          if (f[m] === undefined) row.push("");
-          else row.push(Array.isArray(f[m]) ? f[m].join("; ") : f[m].toString());
+          row.push(f[m] !== undefined ? (Array.isArray(f[m]) ? f[m].join("; ") : f[m]) : "");
         });
         rows.push(row.join(","));
       }
@@ -111,22 +174,21 @@ export default function MetadataPage() {
       </div>
     );
 
-  // Arrange metadata columns: checked ones first in the order they appear in allMetadataKeys
+  // Order metadata: checked first in the order of allMetadataKeys, then unchecked if selected
   const orderedMetadata = [
     ...allMetadataKeys.filter((m) => metadata.includes(m)),
-    ...allMetadataKeys.filter((m) => !metadata.includes(m)),
-  ].filter((m) => metadata.includes(m));
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-6 flex flex-col items-center">
-      <div className="w-full max-w-7xl bg-white shadow-lg rounded-2xl p-8">
+      <div className="w-full max-w-[95%] bg-white shadow-lg rounded-2xl p-8">
         <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">
-          📝 Field Metadata Viewer
+          📝 Salesforce Field Metadata Viewer
         </h2>
 
         <div className="flex flex-col md:flex-row gap-6">
           {/* Left: Metadata checkboxes */}
-          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[700px]">
+          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[800px]">
             <h4 className="text-lg font-semibold mb-3 text-gray-700">
               Show Metadata
             </h4>
@@ -150,7 +212,7 @@ export default function MetadataPage() {
           </div>
 
           {/* Right: Fields table */}
-          <div className="flex-1 border border-gray-200 rounded-lg overflow-auto max-h-[700px]">
+          <div className="flex-1 border border-gray-200 rounded-lg overflow-auto max-h-[800px]">
             <table className="min-w-full text-sm border-collapse">
               <thead className="bg-blue-100 sticky top-0">
                 <tr>
@@ -181,7 +243,7 @@ export default function MetadataPage() {
                         {f[m] !== undefined
                           ? Array.isArray(f[m])
                             ? f[m].join("; ")
-                            : f[m].toString()
+                            : f[m]
                           : ""}
                       </td>
                     ))}
