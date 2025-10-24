@@ -1,5 +1,4 @@
 import './globals.css';
-import LogoutButton from './components/LogoutButton';
 
 export const metadata = {
   title: 'Salesforce Metadata Extractor',
@@ -12,7 +11,7 @@ export default function RootLayout({ children }) {
       <body>
         <header className="navbar">
           <h1 className="text-xl font-bold text-primary">Salesforce Metadata Extractor</h1>
-          <LogoutButton /> {/* client component handles visibility */}
+          <a href="/" className="btn btn-secondary">Logout</a>
         </header>
         <main className="container">{children}</main>
       </body>
