@@ -1,5 +1,5 @@
 import './globals.css';
-import LogoutButton from './components/LogoutButton';
+import LogoutButton from './components/LogoutButton.js';
 
 export const metadata = {
   title: 'Salesforce Metadata Extractor',
