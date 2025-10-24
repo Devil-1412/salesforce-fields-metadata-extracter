@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 export default function MetadataPage() {
   const router = useRouter();
 
-  // All possible Salesforce field metadata keys
   const allMetadataKeys = [
     "label",
     "name",
@@ -28,7 +27,6 @@ export default function MetadataPage() {
     "deprecatedAndHidden",
   ];
 
-  // Important fields ticked by default
   const defaultSelected = ["label", "type", "length", "required", "picklistValues"];
 
   const [metadata, setMetadata] = useState(defaultSelected);
@@ -40,9 +38,11 @@ export default function MetadataPage() {
   const [instanceUrl, setInstanceUrl] = useState("");
 
   useEffect(() => {
-      const t = sessionStorage.getItem("accessToken");
-      const url = sessionStorage.getItem("instanceUrl");
-      const selObjs = JSON.parse(sessionStorage.getItem("selectedObjects") || "[]");
+    if (typeof window === "undefined") return;
+
+    const t = sessionStorage.getItem("accessToken");
+    const url = sessionStorage.getItem("instanceUrl");
+    const selObjs = JSON.parse(sessionStorage.getItem("selectedObjects") || "[]");
 
     if (!t || !url || selObjs.length === 0) return router.push("/");
 
@@ -111,16 +111,22 @@ export default function MetadataPage() {
       </div>
     );
 
+  // Arrange metadata columns: checked ones first in the order they appear in allMetadataKeys
+  const orderedMetadata = [
+    ...allMetadataKeys.filter((m) => metadata.includes(m)),
+    ...allMetadataKeys.filter((m) => !metadata.includes(m)),
+  ].filter((m) => metadata.includes(m));
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-6 flex flex-col items-center">
-      <div className="w-full max-w-6xl bg-white shadow-lg rounded-2xl p-8">
+      <div className="w-full max-w-7xl bg-white shadow-lg rounded-2xl p-8">
         <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">
           📝 Field Metadata Viewer
         </h2>
 
         <div className="flex flex-col md:flex-row gap-6">
           {/* Left: Metadata checkboxes */}
-          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[500px]">
+          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[700px]">
             <h4 className="text-lg font-semibold mb-3 text-gray-700">
               Show Metadata
             </h4>
@@ -144,14 +150,14 @@ export default function MetadataPage() {
           </div>
 
           {/* Right: Fields table */}
-          <div className="flex-1 border border-gray-200 rounded-lg overflow-auto max-h-[500px]">
+          <div className="flex-1 border border-gray-200 rounded-lg overflow-auto max-h-[700px]">
             <table className="min-w-full text-sm border-collapse">
               <thead className="bg-blue-100 sticky top-0">
                 <tr>
                   <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700">
                     Field Name
                   </th>
-                  {metadata.map((m) => (
+                  {orderedMetadata.map((m) => (
                     <th
                       key={m}
                       className="border border-gray-300 p-2 text-left font-semibold text-gray-700 capitalize"
@@ -170,7 +176,7 @@ export default function MetadataPage() {
                     <td className="border border-gray-200 p-2 font-medium text-gray-800">
                       {f.name}
                     </td>
-                    {metadata.map((m) => (
+                    {orderedMetadata.map((m) => (
                       <td key={m} className="border border-gray-200 p-2 text-gray-700">
                         {f[m] !== undefined
                           ? Array.isArray(f[m])
