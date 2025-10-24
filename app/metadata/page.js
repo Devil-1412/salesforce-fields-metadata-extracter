@@ -40,9 +40,11 @@ export default function MetadataPage() {
   const [instanceUrl, setInstanceUrl] = useState("");
 
   useEffect(() => {
-    const t = sessionStorage.getItem("accessToken");
-    const url = sessionStorage.getItem("instanceUrl");
-    const selObjs = JSON.parse(sessionStorage.getItem("selectedObjects") || "[]");
+    if (typeof window !== "undefined") {
+      const t = sessionStorage.getItem("accessToken");
+      const url = sessionStorage.getItem("instanceUrl");
+      const selObjs = JSON.parse(sessionStorage.getItem("selectedObjects") || "[]");
+    }
 
     if (!t || !url || selObjs.length === 0) return router.push("/");
 
