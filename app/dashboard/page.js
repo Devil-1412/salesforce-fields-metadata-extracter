@@ -56,7 +56,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col items-center p-6">
-      <div className="w-full max-w-3xl bg-white shadow-lg rounded-2xl p-8">
+      <div className="w-full max-w-4xl bg-white shadow-lg rounded-2xl p-8">
         <h2 className="text-3xl font-bold text-center text-blue-700 mb-6">
           🧩 Salesforce Object Selector
         </h2>
@@ -72,31 +72,41 @@ export default function Dashboard() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center h-40 text-gray-500">
+          <div className="flex justify-center items-center h-48 text-gray-500">
             <span className="animate-pulse">Loading objects...</span>
           </div>
         ) : (
-          <div className="border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto bg-gray-50">
+          <div className="border border-gray-200 rounded-lg p-4 max-h-[600px] overflow-y-auto bg-gray-50">
             {filteredObjects.length > 0 ? (
-              filteredObjects.map((o) => (
-                <div
-                  key={o.name}
-                  className="flex items-center justify-between px-3 py-2 hover:bg-blue-50 rounded-lg transition"
-                >
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(o.name)}
-                      onChange={() => handleCheck(o.name)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-gray-700 font-medium">
-                      {o.label}
-                    </span>
-                    <span className="text-sm text-gray-500">({o.name})</span>
-                  </label>
-                </div>
-              ))
+              <table className="min-w-full text-left border-collapse">
+                <thead className="bg-blue-100 sticky top-0">
+                  <tr>
+                    <th className="border border-gray-300 px-4 py-2 font-semibold">Select</th>
+                    <th className="border border-gray-300 px-4 py-2 font-semibold">Object Label</th>
+                    <th className="border border-gray-300 px-4 py-2 font-semibold">API Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredObjects.map((o) => (
+                    <tr key={o.name} className="hover:bg-blue-50 transition">
+                      <td className="border border-gray-200 px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(o.name)}
+                          onChange={() => handleCheck(o.name)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-gray-700 font-medium">
+                        {o.label}
+                      </td>
+                      <td className="border border-gray-200 px-4 py-2 text-gray-500">
+                        {o.name}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <p className="text-center text-gray-500">No objects found.</p>
             )}
