@@ -29,8 +29,8 @@ export default function CompareFields() {
     }
 
     setSelectedObjects(objs);
-    setOrg1Name(org1.username?.split("@")[1]?.split(".")[0] || "Org 1");
-    setOrg2Name(org2.username?.split("@")[1]?.split(".")[0] || "Org 2");
+    setOrg1Name(org1.username?.split("@")[1]?.split(".")[2] || "Org 1");
+    setOrg2Name(org2.username?.split("@")[1]?.split(".")[2] || "Org 2");
 
     const fetchData = async () => {
       try {
