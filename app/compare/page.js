@@ -11,7 +11,7 @@ export default function ComparePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({
-    both: false,
+    both: false, 
     onlyOrg1: false,
     onlyOrg2: false,
   });
