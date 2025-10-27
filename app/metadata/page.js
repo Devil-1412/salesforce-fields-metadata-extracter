@@ -7,8 +7,8 @@ export default function MetadataPage() {
 
   // All metadata fields you want to extract
   const allMetadataKeys = [
-    "Field Label",
-    "API name",
+    "label",
+    "APIName",
     "type",
     "length",
     "precision",
@@ -74,8 +74,6 @@ export default function MetadataPage() {
     "unique",
     "writeRequiresMasterRead",
     "writeRequiresMasterReadSpecified",
-    "Object",
-    "API Name",
     "Salesforce Data Type",
     "MSSQL Data Type",
     "Oracle Data Type",
@@ -85,14 +83,14 @@ export default function MetadataPage() {
     "Createable",
     "Updateable",
     "On Page Layout",
-    "Picklist Values",
+    "PicklistValues",
     "Category",
     "Description",
     "Help Text",
     "Formula"
   ];
 
-  const defaultSelected = ["Field Label", "type", "length", "required", "picklistValues"];
+  const defaultSelected = ["label", "APIName", "type", "length", "required", "PicklistValues"];
 
   const [metadata, setMetadata] = useState(defaultSelected);
   const [fieldsData, setFieldsData] = useState({});
@@ -218,7 +216,7 @@ export default function MetadataPage() {
               <thead className="bg-blue-100 sticky top-0">
                 <tr>
                   <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700">
-                    Field Name
+                    Object Name
                   </th>
                   {orderedMetadata.map((m) => (
                     <th
@@ -233,18 +231,20 @@ export default function MetadataPage() {
               <tbody>
                 {(fieldsData[selectedObject] || []).map((f) => (
                   <tr
-                    key={f.name}
+                    key={selectedObject}
                     className="hover:bg-blue-50 transition border-b border-gray-100"
                   >
                     <td className="border border-gray-200 p-2 font-medium text-gray-800">
-                      {f.name}
+                      {selectedObject}
                     </td>
                     {orderedMetadata.map((m) => (
                       <td key={m} className="border border-gray-200 p-2 text-gray-700">
-                        {f[m] !== undefined
-                          ? Array.isArray(f[m])
-                            ? f[m].join("; ")
-                            : f[m]
+                        {f[m] === null
+                          ? "null"
+                          : Array.isArray(f[m])
+                          ? f[m].join("; ")
+                          : f[m] !== undefined
+                          ? String(f[m])
                           : ""}
                       </td>
                     ))}

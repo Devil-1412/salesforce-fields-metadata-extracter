@@ -17,10 +17,10 @@ export default async function handler(req, res) {
 
     for (let obj of objects) {
       const desc = await conn.sobject(obj).describe();
-      console.log(desc);
       result[obj] = desc.fields.map((f) => ({
         label: f.label,
-        name: f.name,
+        nameField: f.nameField,
+        APIName: f.name,
         type: f.type,
         length: f.length,
         precision: f.precision,
@@ -70,7 +70,6 @@ export default async function handler(req, res) {
         htmlFormatted: f.htmlFormatted,
         htmlFormattedSpecified: f.htmlFormattedSpecified,
         idLookup: f.idLookup,
-        nameField: f.nameField,
         namePointing: f.namePointing,
         namePointingSpecified: f.namePointingSpecified,
         permissionable: f.permissionable,
