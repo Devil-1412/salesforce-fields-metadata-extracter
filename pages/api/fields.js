@@ -19,8 +19,8 @@ export default async function handler(req, res) {
       const desc = await conn.sobject(obj).describe();
       console.log(desc);
       result[obj] = desc.fields.map((f) => ({
-        name: f.name,
         label: f.label,
+        name: f.name,
         type: f.type,
         length: f.length,
         precision: f.precision,
