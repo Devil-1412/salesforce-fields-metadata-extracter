@@ -46,8 +46,8 @@ export default async function handler(req, res) {
     });
 
     res.status(200).json({
-      org1Name: org1.username.split("@")[1].split(".")[0],
-      org2Name: org2.username.split("@")[1].split(".")[0],
+      org1Name: org1.username.split("@")[1].split(".")[2],
+      org2Name: org2.username.split("@")[1].split(".")[2],
       comparison
     });
   } catch (err) {
