@@ -8,6 +8,7 @@ export default function MetadataPage() {
   // All metadata fields you want to extract
   const allMetadataKeys = [
     "Field Label",
+    "API name",
     "type",
     "length",
     "precision",
