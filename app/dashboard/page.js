@@ -26,7 +26,7 @@ export default function Dashboard() {
           body: JSON.stringify({ accessToken: t, instanceUrl: url }),
         });
         const data = await res.json();
-        if (data.success) setObjects(data.objects);
+        if (data.success) setObjects(data.objectsWithCount);
       } catch (err) {
         console.error(err);
       } finally {
