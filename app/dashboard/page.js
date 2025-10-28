@@ -85,6 +85,7 @@ export default function Dashboard() {
                     <th className="border border-gray-300 px-4 py-2 font-semibold">ID Prefix</th>
                     <th className="border border-gray-300 px-4 py-2 font-semibold">API Name</th>
                     <th className="border border-gray-300 px-4 py-2 font-semibold">Object Label</th>
+                    <th className="border border-gray-300 px-4 py-2 font-semibold">Records Count</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -107,6 +108,10 @@ export default function Dashboard() {
                       <td className="border border-gray-200 px-4 py-2 text-gray-500">
                         {o.name}
                       </td>
+                      <td className="border border-gray-200 px-4 py-2 text-gray-500">
+                        {o.recordCount}
+                      </td>
+                      
                     </tr>
                   ))}
                 </tbody>
