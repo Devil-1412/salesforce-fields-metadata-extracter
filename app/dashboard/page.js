@@ -10,6 +10,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
+  const [counts, setCounts] = useState({});
+
 
   useEffect(() => {
     const t = sessionStorage.getItem("accessToken");
@@ -26,7 +28,7 @@ export default function Dashboard() {
           body: JSON.stringify({ accessToken: t, instanceUrl: url }),
         });
         const data = await res.json();
-        if (data.success) setObjects(data.objectsWithCount);
+        if (data.success) setObjects(data.objects);
       } catch (err) {
         console.error(err);
       } finally {
@@ -40,6 +42,20 @@ export default function Dashboard() {
     setSelected((prev) =>
       prev.includes(obj) ? prev.filter((o) => o !== obj) : [...prev, obj]
     );
+  };
+
+  const fetchRecordCount = async (objectName) => {
+    const instanceUrl = sessionStorage.getItem("instanceUrl");
+    const accessToken = sessionStorage.getItem("accessToken");
+
+    const res = await fetch("/api/getRecordCount", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instanceUrl, accessToken, objectName }),
+    });
+
+    const data = await res.json();
+    setCounts((prev) => ({ ...prev, [objectName]: data.count ?? "Error" }));
   };
 
   const handleExtract = () => {
@@ -109,7 +125,15 @@ export default function Dashboard() {
                         {o.name}
                       </td>
                       <td className="border border-gray-200 px-4 py-2 text-gray-500">
-                        {o.recordCount}
+                          <div className="flex items-center justify-between">
+
+                            <button
+                              onClick={() => fetchRecordCount(o.name)}
+                              className="ml-3 text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded transition"
+                            >
+                              {counts[o.name] !== undefined ? counts[o.name] : "Get Count"}
+                            </button>
+                          </div>
                       </td>
                       
                     </tr>
