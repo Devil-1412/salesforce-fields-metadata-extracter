@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     }
 
     if (!orgs || orgs.length === 0) {
-      return res.status(200).json({ success: true, data: [] });
+      return res.status(200).json({ success: false, error: "No org present" });
     }
 
     // 🔹 Login to all orgs concurrently and fetch org details
