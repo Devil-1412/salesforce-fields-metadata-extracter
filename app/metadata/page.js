@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 export default function MetadataPage() {
@@ -7,7 +7,7 @@ export default function MetadataPage() {
 
   const allMetadataKeys = [
     "label",
-    "APIName",
+    "ApiName",
     "type",
     "length",
     "precision",
@@ -89,20 +89,24 @@ export default function MetadataPage() {
     "Formula"
   ];
 
-  const analysisFields = [
-    "fieldCount", "nullCount", "percentPresent", "distinctCount", "sample"
-  ];
+  const TABS = ["Fields", "Validation Rules", "Triggers", "Apex Classes", "Workflows"];
+  const [activeTab, setActiveTab] = useState("Fields");
 
-  const defaultSelected = ["label", "APIName", "type", "length", "PicklistValues"];
-  const [metadata, setMetadata] = useState(defaultSelected);
+  const [objectDetails, setObjectDetails] = useState([]);
+  const [recordCounts, setRecordCounts] = useState({});
   const [fieldsData, setFieldsData] = useState({});
+  const [validationRules, setValidationRules] = useState([]);
+  const [triggers, setTriggers] = useState([]);
+  const [apexClasses, setApexClasses] = useState([]);
+  const [workflows, setWorkflows] = useState([]);
   const [selectedObject, setSelectedObject] = useState("");
   const [selectedObjects, setSelectedObjects] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [token, setToken] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
-  const [analysisCache, setAnalysisCache] = useState({});
-  const [activeAnalysisCols, setActiveAnalysisCols] = useState([]); // 👈 Track which analysis columns are active
+  const [loading, setLoading] = useState(true);
+
+
+  // ✅ On mount
 
   useEffect(() => {
     const t = sessionStorage.getItem("accessToken");
@@ -113,9 +117,12 @@ export default function MetadataPage() {
     setToken(t);
     setInstanceUrl(url);
     setSelectedObjects(selObjs);
+    setSelectedObject(selObjs[0]);
 
-    const fetchFields = async () => {
+    // Fetch all data 
+    const fetchAll = async () => {
       try {
+        // Fetch field metadata
         const res = await fetch("/api/fields", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -126,110 +133,105 @@ export default function MetadataPage() {
           setFieldsData(data.data);
           setSelectedObject(selObjs[0]);
         }
+
+        // Fetch object details (API name, label, prefix)
+        const objRes = await fetch("/api/objects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: t, instanceUrl: url }),
+        });
+        const objData = await objRes.json();
+        if (objData.success) {
+          setObjectDetails(objData.object);
+        }
+
+        // Fetch record counts
+        for (const obj of selObjs) {
+          // Fire one request per object
+          fetch("/api/getRecordCount", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accessToken: t,
+              instanceUrl: url,
+              objectName: obj,
+            }),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              // Update count as soon as one finishes, preserving previous
+              setRecordCounts((prev) => ({
+                ...prev,
+                [obj]: data.success ? data.count : "N/A",
+              }));
+            })
+            .catch(() => {
+              // Handle errors gracefully
+              setRecordCounts((prev) => ({
+                ...prev,
+                [obj]: "N/A",
+              }));
+            });
+        }
+
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
-    fetchFields();
+
+    fetchAll();
+
+
   }, [router]);
 
-  // Trigger field analysis for specific type
-  const fieldAnalysis = async (type, checked) => {
-    // Add or remove the analysis column from active columns
-    setActiveAnalysisCols((prev) =>
-      checked ? [...prev, type] : prev.filter((col) => col !== type)
-    );
+  // ✅ Fetchers for each metadata type (called on tab switch)
+  const fetchMetadataByType = async (type) => {
+    if (!token || !instanceUrl) return;
+    const existingData =
+      (type === "validationRules" && validationRules.length > 0) ||
+      (type === "triggers" && triggers.length > 0) ||
+      (type === "apexClasses" && apexClasses.length > 0) ||
+      (type === "workflows" && workflows.length > 0);
 
-    if (!checked) return; // don’t fetch when unchecked
-
-    // If already cached
-    if (analysisCache[selectedObject]?.[type]) {
-      mergeFieldAnalysis(selectedObject, analysisCache[selectedObject][type], type);
-      return;
-    }
-
+    if (existingData) return;
     try {
-      const res = await fetch("/api/fieldAnalysis", {
+      const res = await fetch(`/api/objectMetadata`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: token,
-          instanceUrl: instanceUrl,
-          objectName: selectedObject,
-          type: type,
-        }),
+        body: JSON.stringify({ accessToken: token, instanceUrl, selectedObject, type }),
       });
-
       const data = await res.json();
       if (data.success) {
-        // Cache results
-        setAnalysisCache((prev) => ({
-          ...prev,
-          [selectedObject]: {
-            ...(prev[selectedObject] || {}),
-            [type]: data.data,
-          },
-        }));
-        // Merge results into table
-        mergeFieldAnalysis(selectedObject, data.data, type);
+        switch (type) {
+          case "validationRules":
+            setValidationRules(data.data);
+            break;
+          case "triggers":
+            setTriggers(data.data);
+            break;
+          case "apexClasses":
+            setApexClasses(data.data);
+            break;
+          case "workflows":
+            setWorkflows(data.data);
+            break;
+        }
       }
-    } catch (error) {
-      console.error(error);
-      alert("Couldn't load data...");
+    } catch (err) {
+      console.error(`Error fetching ${type}:`, err);
     }
   };
 
-  // Merge field-level analysis results into fieldsData
-  const mergeFieldAnalysis = (objectName, analysisData, type) => {
-    setFieldsData((prev) => {
-      const updated = { ...prev };
-      const fields = updated[objectName] || [];
 
-      const merged = fields.map((f) => {
-        const fieldName = f.APIName || f.name;
-        const value = analysisData[fieldName] ?? f[type];
-        return { ...f, [type]: value };
-      });
-
-      updated[objectName] = merged;
-      return updated;
-    });
-  };
-
-  const toggleMetadata = (meta) => {
-    setMetadata((prev) =>
-      prev.includes(meta) ? prev.filter((m) => m !== meta) : [...prev, meta]
-    );
-  };
-
-
-  const exportToCSV = () => {
-    const rows = [];
-    const header = ["Object", "Field", ...metadata];
-    rows.push(header.join(","));
-
-    for (const [obj, fields] of Object.entries(fieldsData)) {
-      for (const f of fields) {
-        const row = [obj, f.name];
-        metadata.forEach((m) => {
-          row.push(f[m] !== undefined ? (Array.isArray(f[m]) ? f[m].join("; ") : f[m]) : "");
-        });
-        rows.push(row.join(","));
-      }
-    }
-
-    const csvContent = "data:text/csv;charset=utf-8," + rows.join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "metadata.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
+  // ✅ Load data when user switches tab
+  useEffect(() => {
+    if (activeTab === "Validation Rules") fetchMetadataByType("validationRules");
+    else if (activeTab === "Triggers") fetchMetadataByType("triggers");
+    else if (activeTab === "Apex Classes") fetchMetadataByType("apexClasses");
+    else if (activeTab === "Workflows") fetchMetadataByType("workflows");
+  }, [activeTab]);
 
   if (loading)
     return (
@@ -238,139 +240,550 @@ export default function MetadataPage() {
       </div>
     );
 
-  const orderedMetadata = [
-    ...allMetadataKeys.filter((m) => metadata.includes(m)),
-  ];
-
-  const displayedColumns = [...orderedMetadata, ...activeAnalysisCols]; // 👈 Combine dynamically
-
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 to-gray-100 text-gray-800 flex flex-col items-center justify-start p-8">
-      <div className="w-full max-w-[98%] bg-white shadow-2xl rounded-3xl p-10 border border-gray-200 min-h-[90vh] overflow-hidden">
-        <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">
-          🧩 Salesforce Field Metadata & Dynamic Analysis
-        </h2>
+    <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 to-gray-100 text-gray-800 flex flex-col items-center p-8">
+      <div className="w-full max-w-[98%] bg-white shadow-2xl rounded-3xl p-10 border border-gray-200 min-h-[90vh] overflow-visible">
 
-        {/* Analysis checkboxes */}
-        <div className="flex flex-wrap gap-4 mb-6 justify-center">
-          {analysisFields.map((type) => (
-            <label key={type} className="flex items-center text-gray-700">
-              <input
-                type="checkbox"
-                checked={activeAnalysisCols.includes(type)}
-                onChange={(e) => fieldAnalysis(type, e.target.checked)}
-                className="mr-2 w-4 h-4 text-blue-600 focus:ring-blue-500"
-              />
-              {type.replace(/([A-Z])/g, " $1")}
-            </label>
+        {/* 🌈 HEADER SECTION */}
+        <header className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-10 rounded-3xl shadow-lg mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div>
+              <h1 className="text-4xl font-extrabold tracking-tight mb-1">
+                Salesforce Metadata Explorer
+              </h1>
+              <p className="text-blue-100 text-sm">
+                Analyze objects, fields, and automation in your Salesforce org.
+              </p>
+            </div>
+
+            <div className="mt-4 md:mt-0 text-right">
+              <p className="text-sm text-blue-100">
+                Connected Instance:
+              </p>
+              <p className="font-semibold text-white">
+                {instanceUrl?.replace("https://", "") || "Not Connected"}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* 🧩 OBJECT SELECTION + INFO SECTION */}
+        <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 flex flex-col md:flex-row justify-between items-center">
+          {/* Dropdown */}
+          <div className="flex flex-col items-start gap-2 w-full max-w-md">
+            <label className="text-sm font-semibold text-gray-700">Select Object</label>
+            <select
+              value={selectedObject}
+              onChange={(e) => setSelectedObject(e.target.value)}
+              className="w-full appearance-none bg-white border border-gray-300 text-gray-800 text-base rounded-xl px-4 py-3 shadow-sm hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition duration-200 cursor-pointer"
+            >
+              <option value="" disabled>
+                — Choose Object —
+              </option>
+              {selectedObjects.map((o) => (
+                <option key={o} value={o} className="text-gray-700">
+                  {o} ({recordCounts[o] ?? "…"} records)
+                </option>
+              ))}
+            </select>
+          </div>
+
+
+          {/* Object Info Summary */}
+          <div className="flex items-center gap-6 flex-wrap justify-center md:justify-end">
+            <div className="bg-blue-50 rounded-xl px-5 py-3 border border-blue-100 shadow-sm text-center">
+              <p className="text-xs uppercase text-gray-500 font-medium">Key Prefix</p>
+              <p className="text-base font-semibold text-blue-700">
+                {objectDetails.filter((obj) => selectedObjects.includes(obj.name)).find((o) => o.name === selectedObject)?.keyPrefix || "—"}
+              </p>
+            </div>
+
+            <div className="bg-indigo-50 rounded-xl px-5 py-3 border border-indigo-100 shadow-sm text-center">
+              <p className="text-xs uppercase text-gray-500 font-medium">Fields</p>
+              <p className="text-base font-semibold text-indigo-700">
+                {fieldsData[selectedObject]?.length || 0}
+              </p>
+            </div>
+
+            <div className="bg-green-50 rounded-xl px-5 py-3 border border-green-100 shadow-sm text-center">
+              <p className="text-xs uppercase text-gray-500 font-medium">Records</p>
+              <p className="text-base font-semibold text-green-700">
+                {recordCounts[selectedObject] || "—"}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 🔹 Tabs */}
+        <div className="flex justify-center mb-8 border-b border-gray-200">
+          {TABS.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-3 text-lg font-semibold transition-colors ${activeTab === tab
+                ? "border-b-4 border-blue-600 text-blue-700"
+                : "text-gray-500 hover:text-blue-600"
+                }`}
+            >
+              {tab}
+            </button>
           ))}
         </div>
 
-        <div className="flex flex-col md:flex-row gap-6"> 
-          {/* Left: Metadata checkboxes */} 
-          <div className="md:w-1/4 bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto max-h-[800px]"> 
-          <h4 className="text-lg font-semibold mb-3 text-gray-700"> Show Metadata </h4> 
-          {allMetadataKeys.map((m) => (
-             <div key={m} className="flex items-center mb-2"> 
-             <input 
-             type="checkbox" 
-             checked={metadata.includes(m)} 
-             onChange={() => toggleMetadata(m)} 
-             className="mr-2 text-blue-600 focus:ring-blue-500 w-4 h-4" /> 
-             <label
-                  className={`text-gray-700 capitalize cursor-pointer ${
-                    defaultSelected.includes(m) ? "font-semibold text-blue-600" : ""
-                  }`}
-                >
-                  {m}
-            </label> 
-            </div> ))} 
-          </div>
+        {/* 🔹 Tab Content */}
+        {activeTab === "Fields" && (
+          <FieldsTable
+            selectedObject={selectedObject}
+            selectedObjects={selectedObjects}
+            fieldsData={fieldsData}
+            allMetadataKeys={allMetadataKeys}
+          />
+        )}
 
-        {/* Unified Dynamic Table */}
-        <div className="border border-gray-200 rounded-2xl overflow-auto flex-1 max-h-[75vh] min-h-[800px] shadow-inner">
-          <table className="min-w-full text-sm border-collapse table-auto">
+        {activeTab === "Validation Rules" && <ValidationRulesTable data={validationRules} />}
+        {activeTab === "Triggers" && <TriggersTable data={triggers} />}
+        {activeTab === "Apex Classes" && <ApexClassesTable data={apexClasses} />}
+        {activeTab === "Workflows" && <WorkflowsTable data={workflows} />}
+      </div>
+    </div>
+  );
+
+}
+
+/* ---------------------------
+ ✅ Sub-components for tables
+----------------------------*/
+
+
+export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMetadataKeys }) {
+  const [selectedMetadata, setSelectedMetadata] = useState(["label", "ApiName", "type", "length", "description"]);
+  const [typeFilter, setTypeFilter] = useState([]);
+  const [exportObjects, setExportObjects] = useState(selectedObjects);
+
+  const fields = fieldsData[selectedObject] || [];
+
+  // 🔍 Get all unique field types dynamically
+  const allTypes = useMemo(() => [...new Set(fields.map((f) => f.type).filter(Boolean))], [fields]);
+
+  // 🔄 Filtered fields based on selected types
+  const filteredFields = useMemo(() => {
+    if (typeFilter.length === 0) return fields;
+    return fields.filter((f) => typeFilter.includes(f.type));
+  }, [fields, typeFilter]);
+
+  // Toggle for multi-select dropdowns
+  const toggleSelection = (value, setState) => {
+    setState((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    );
+  };
+
+  const exportSelectedToCSV = (selectedObjs) => {
+    if (selectedObjs.length === 0) {
+      alert("Please select at least one object to export.");
+      return;
+    }
+
+    const rows = [];
+    const header = ["Object"];
+    header.push(selectedMetadata);
+    rows.push(header.join(","));
+
+    selectedObjs.forEach((obj) => {
+      const fields = fieldsData[obj];
+      if (fields && fields.length > 0) {
+        fields.forEach((f) => {
+          const row = [obj, f.ApiName || f.name];
+          selectedMetadata.forEach((m) => {
+            row.push(
+              f[m] !== undefined
+                ? Array.isArray(f[m])
+                  ? `"${f[m].join("; ")}"`
+                  : `"${String(f[m]).replace(/"/g, '""')}"`
+                : ""
+            );
+          });
+          rows.push(row.join(","));
+        });
+      }
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + rows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "fields_metadata.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Dropdown controls */}
+      <div className="flex flex-wrap justify-between items-center gap-6 mb-4">
+        {/* Metadata selection dropdown */}
+        <div className="relative">
+          <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-64 shadow-sm">
+            <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
+              Metadata Columns
+              <span className="text-gray-500 text-sm">
+                ({selectedMetadata.length})
+              </span>
+            </summary>
+            <div className="absolute z-20 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2">
+              {allMetadataKeys.map((meta) => (
+                <label
+                  key={meta}
+                  className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedMetadata.includes(meta)}
+                    onChange={() => toggleSelection(meta, setSelectedMetadata)}
+                    className="mr-2 accent-blue-600"
+                  />
+                  {meta}
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
+
+        {/* Type filter dropdown */}
+        <div className="relative">
+          <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-64 shadow-sm">
+            <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
+              Filter by Field Type
+              <span className="text-gray-400 text-sm">
+                ({typeFilter.length || "All"})
+              </span>
+            </summary>
+            <div className="absolute z-20 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2">
+              {allTypes.map((t) => (
+                <label
+                  key={t}
+                  className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={typeFilter.includes(t)}
+                    onChange={() => toggleSelection(t, setTypeFilter)}
+                    className="mr-2 accent-blue-600"
+                  />
+                  {t}
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
+      </div>
+
+      {/* Table container */}
+      <div className="border border-gray-200 rounded-2xl overflow-auto flex-1 max-h-[75vh] min-h-[600px] shadow-inner">
+        <table className="min-w-full text-sm border-collapse table-auto">
           <thead className="bg-blue-100 sticky top-0 z-10">
             <tr>
-              <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700 w-16">
+              <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700 w-12">
                 #
               </th>
-              <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700">
-                Object
-              </th>
-              {displayedColumns.map((m) => (
+              {selectedMetadata.map((meta) => (
                 <th
-                  key={m}
+                  key={meta}
                   className="border border-gray-300 p-2 text-left font-semibold text-gray-700 capitalize"
                 >
-                  {m.replace(/([A-Z])/g, " $1")}
+                  {meta.replace(/([A-Z])/g, " $1")}
                 </th>
               ))}
             </tr>
           </thead>
 
           <tbody>
-            {(fieldsData[selectedObject] || []).map((f, i) => (
+            {filteredFields.map((f, i) => (
               <tr
                 key={`${selectedObject}-${i}`}
                 className="hover:bg-blue-50 transition border-b border-gray-100"
               >
-                <td className="border border-gray-200 p-2 text-gray-600 font-medium text-center w-16">
+                <td className="border border-gray-200 p-2 text-gray-600 text-center w-12">
                   {i + 1}
                 </td>
-                <td className="border border-gray-200 p-2 font-medium text-gray-800">
-                  {selectedObject}
-                </td>
-                {displayedColumns.map((m) => (
-                  <td key={m} className="border border-gray-200 p-2 text-gray-700">
-                    {f[m] === null
+                {selectedMetadata.map((meta) => (
+                  <td key={meta} className="border border-gray-200 p-2 text-gray-700">
+                    {f[meta] === null
                       ? "null"
-                      : Array.isArray(f[m])
-                      ? f[m].join("; ")
-                      : f[m] !== undefined
-                      ? String(f[m])
-                      : ""}
+                      : Array.isArray(f[meta])
+                        ? f[meta].join("; ")
+                        : f[meta] !== undefined
+                          ? String(f[meta])
+                          : ""}
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
-
-          </table>
-        </div>
+        </table>
       </div>
 
-        {/* Object selector and Export */}
-        <div className="mt-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <select
-            value={selectedObject}
-            onChange={(e) => setSelectedObject(e.target.value)}
-            className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
-          >
-            {selectedObjects.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+        {/* Multi-select dropdown */}
+        <div className="relative" >
+          <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-100 shadow-sm">
+            <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
+              Select Objects for CSV Export
+              <span className="text-gray-500 text-sm ml-2">
+                ({exportObjects.length || "All"})
+              </span>
+            </summary>
+            <div className="absolute z-200 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2" style={{ position: "absolute", top: "100%", overflow: "visible" }}>
+              {selectedObjects.map((t) => (
+                <label
+                  key={t}
+                  className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={exportObjects.includes(t)}
+                    onChange={() => toggleSelection(t, setExportObjects)}
+                    className="mr-2 accent-blue-600"
+                  />
+                  {t}
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
+
+        {/* Export button */}
+        <button
+          onClick={() => exportSelectedToCSV(exportObjects)}
+          disabled={exportObjects.length === 0}
+          className={`px-6 py-2 rounded-lg font-semibold transition ${exportObjects.length === 0
+            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+            : "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+            }`}
+        >
+          Export CSV
+        </button>
+      </div>
+
+    </div>
+  );
+}
+
+
+function ValidationRulesTable({ data = [] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
+        No validation rules found.
+      </div>
+    );
+  }
+
+  // Dynamically get all unique keys from the data array
+  const allKeys = Array.from(
+    new Set(data.flatMap((item) => Object.keys(item)))
+  );
+
+  return (
+    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
+      <table className="min-w-full text-sm border-collapse">
+        <thead className="bg-green-100 sticky top-0 z-10">
+          <tr>
+            {allKeys.map((key) => (
+              <th
+                key={key}
+                className="border p-2 text-left font-semibold text-gray-700 capitalize"
+              >
+                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
+              </th>
             ))}
-          </select>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr
+              key={row.Id || row.fullName || i}
+              className="hover:bg-green-50 transition border-b"
+            >
+              {allKeys.map((key) => (
+                <td key={key} className="border p-2 text-gray-700">
+                  {Array.isArray(row[key])
+                    ? row[key].join(", ")
+                    : typeof row[key] === "object" && row[key] !== null
+                      ? JSON.stringify(row[key])
+                      : row[key] !== undefined && row[key] !== null
+                        ? String(row[key])
+                        : "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-          <button
-            onClick={() => {
-              const csv = JSON.stringify(fieldsData[selectedObject], null, 2);
-              const blob = new Blob([csv], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = `${selectedObject}_metadata.json`;
-              link.click();
-              URL.revokeObjectURL(url);
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow-md transition"
-          >
-            Export JSON
-          </button>
-        </div>
+
+function TriggersTable({ data = [] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
+        No Triggers found.
       </div>
+    );
+  }
+
+  // Dynamically get all unique keys from the data array
+  const allKeys = Array.from(
+    new Set(data.flatMap((item) => Object.keys(item)))
+  );
+
+  return (
+    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
+      <table className="min-w-full text-sm border-collapse">
+        <thead className="bg-green-100 sticky top-0 z-10">
+          <tr>
+            {allKeys.map((key) => (
+              <th
+                key={key}
+                className="border p-2 text-left font-semibold text-gray-700 capitalize"
+              >
+                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr
+              key={row.Id || row.fullName || i}
+              className="hover:bg-green-50 transition border-b"
+            >
+              {allKeys.map((key) => (
+                <td key={key} className="border p-2 text-gray-700">
+                  {Array.isArray(row[key])
+                    ? row[key].join(", ")
+                    : typeof row[key] === "object" && row[key] !== null
+                      ? JSON.stringify(row[key])
+                      : row[key] !== undefined && row[key] !== null
+                        ? String(row[key])
+                        : "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ApexClassesTable({ data = [] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
+        No Appex Classes found.
+      </div>
+    );
+  }
+
+  // Dynamically get all unique keys from the data array
+  const allKeys = Array.from(
+    new Set(data.flatMap((item) => Object.keys(item)))
+  );
+
+  return (
+    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
+      <table className="min-w-full text-sm border-collapse">
+        <thead className="bg-green-100 sticky top-0 z-10">
+          <tr>
+            {allKeys.map((key) => (
+              <th
+                key={key}
+                className="border p-2 text-left font-semibold text-gray-700 capitalize"
+              >
+                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr
+              key={row.Id || row.fullName || i}
+              className="hover:bg-green-50 transition border-b"
+            >
+              {allKeys.map((key) => (
+                <td key={key} className="border p-2 text-gray-700">
+                  {Array.isArray(row[key])
+                    ? row[key].join(", ")
+                    : typeof row[key] === "object" && row[key] !== null
+                      ? JSON.stringify(row[key])
+                      : row[key] !== undefined && row[key] !== null
+                        ? String(row[key])
+                        : "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function WorkflowsTable({ data = [] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
+        No Workflows found.
+      </div>
+    );
+  }
+
+  // Dynamically get all unique keys from the data array
+  const allKeys = Array.from(
+    new Set(data.flatMap((item) => Object.keys(item)))
+  );
+
+  return (
+    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
+      <table className="min-w-full text-sm border-collapse">
+        <thead className="bg-green-100 sticky top-0 z-10">
+          <tr>
+            {allKeys.map((key) => (
+              <th
+                key={key}
+                className="border p-2 text-left font-semibold text-gray-700 capitalize"
+              >
+                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr
+              key={row.Id || row.fullName || i}
+              className="hover:bg-green-50 transition border-b"
+            >
+              {allKeys.map((key) => (
+                <td key={key} className="border p-2 text-gray-700">
+                  {Array.isArray(row[key])
+                    ? row[key].join(", ")
+                    : typeof row[key] === "object" && row[key] !== null
+                      ? JSON.stringify(row[key])
+                      : row[key] !== undefined && row[key] !== null
+                        ? String(row[key])
+                        : "—"}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

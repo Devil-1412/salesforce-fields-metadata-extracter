@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       result[obj] = desc.fields.map((f) => ({
         label: f.label,
         nameField: f.nameField,
-        APIName: f.name,
+        ApiName: f.name,
         type: f.type,
         length: f.length,
         precision: f.precision,
