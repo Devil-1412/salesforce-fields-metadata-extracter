@@ -1,7 +1,7 @@
 {
-  "/metadata/page": "app/metadata/page.js",
-  "/compare/page": "app/compare/page.js",
   "/compareFields/page": "app/compareFields/page.js",
+  "/compare/page": "app/compare/page.js",
   "/page": "app/page.js",
-  "/login/page": "app/login/page.js"
+  "/objectAnalysis/page": "app/objectAnalysis/page.js",
+  "/profile/page": "app/profile/page.js"
 }

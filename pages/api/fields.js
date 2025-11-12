@@ -19,13 +19,13 @@ export default async function handler(req, res) {
       const desc = await conn.sobject(obj).describe();
       result[obj] = desc.fields.map((f) => ({
         label: f.label,
-        nameField: f.nameField,
         ApiName: f.name,
         type: f.type,
         length: f.length,
         precision: f.precision,
         scale: f.scale,
         digits: f.digits,
+        nameField: f.nameField,
         byteLength: f.byteLength,
         DBOrder: f.DBOrder,
         soapType: f.soapType,
