@@ -20,12 +20,14 @@ export default async function handler(req, res) {
     const org1Objects = meta1.sobjects.map(o => ({
       name: o.name,
       label: o.label,
-      keyPrefix: o.keyPrefix || "—"
+      keyPrefix: o.keyPrefix || "—",
+      custom: o.custom
     }));
     const org2Objects = meta2.sobjects.map(o => ({
       name: o.name,
       label: o.label,
-      keyPrefix: o.keyPrefix || "—"
+      keyPrefix: o.keyPrefix || "—",
+      custom: o.custom
     }));
 
     // Combine results

@@ -82,76 +82,93 @@ export default function ComparePage() {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-5 rounded-3xl shadow-lg mb-6">
+      <div className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 md:p-8 rounded-3xl shadow-xl mb-6">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight mb-1">
             Salesforce Org Compare
           </h1>
           <p className="text-blue-100 text-sm">
-            Compare objects, fields in mutliple Salesforce org.
+            Compare objects and fields across multiple Salesforce orgs.
           </p>
         </div>
-        <div className="flex flex-col md:flex-row justify-between items-center py-5">
-          <div className="mt-4 md:mt-0 text-left">
-            <label className="text-sm text-blue-100 block mb-1">
-              Connected Org1:
+
+        {/* Select Section */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mt-6">
+
+          {/* ORG 1 */}
+          <div className="flex-1">
+            <label className="text-sm text-blue-100 block mb-2">
+              Connected Org 1
             </label>
 
-            <select
-              className="bg-white text-blue-700 font-semibold rounded-lg px-3 py-1 shadow-sm border border-blue-200 focus:ring-2 focus:ring-blue-400 outline-none cursor-pointer"
-              value={org1 || ""}
-              onChange={(e) => {
-                const selectedOrg = orgs.find((o) => o.instanceUrl === e.target.value);
-                if (selectedOrg) {
-                  sessionStorage.setItem("org1", JSON.stringify(selectedOrg));
-                  setOrg1(selectedOrg)
-                  toast.success(`Switched to ${selectedOrg.orgName != "None" ? selectedOrg.orgName : "Selected Org1"}`);
-                }
-              }}
-            >
-              <option value="" disabled>
-                Select an Org
-              </option>
-              {orgs.map((o, idx) => (
-                <option key={idx} value={o.instanceUrl}>
-                  {o.orgName != "None"
-                    ? `${o.orgName} || (${o.instanceUrl.replace("https://", "")})`
-                    : o.instanceUrl.replace("https://", "")}
+            <div className="relative">
+              <select
+                className="w-full bg-white text-blue-700 font-semibold rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-400 transition-all cursor-pointer truncate shadow-sm"
+                value={org1 || ""}
+                onChange={(e) => {
+                  const selectedOrg = orgs.find((o) => o.instanceUrl === e.target.value);
+                  if (selectedOrg) {
+                    sessionStorage.setItem("org1", JSON.stringify(selectedOrg));
+                    setOrg1(selectedOrg);
+                    toast.success(
+                      `Switched to ${selectedOrg.orgName !== "None" ? selectedOrg.orgName : "Selected Org1"
+                      }`
+                    );
+                  }
+                }}
+              >
+                <option value="" disabled>
+                  Select an Org
                 </option>
-              ))}
-            </select>
+                {orgs.map((o, idx) => (
+                  <option key={idx} value={o.instanceUrl}>
+                    {o.orgName !== "None"
+                      ? `${o.orgName} || (${o.instanceUrl.replace("https://", "")})`
+                      : o.instanceUrl.replace("https://", "")}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="mt-4 md:mt-0 text-left">
-            <label className="text-sm text-blue-100 block mb-1">
-              Connected Org2:
+
+          {/* ORG 2 */}
+          <div className="flex-1">
+            <label className="text-sm text-blue-100 block mb-2">
+              Connected Org 2
             </label>
 
-            <select
-              className="bg-white text-blue-700 font-semibold rounded-lg px-3 py-1 shadow-sm border border-blue-200 focus:ring-2 focus:ring-blue-400 outline-none cursor-pointer"
-              value={org2 || ""}
-              onChange={(e) => {
-                const selectedOrg = orgs.find((o) => o.instanceUrl === e.target.value);
-                if (selectedOrg) {
-                  sessionStorage.setItem("org2", JSON.stringify(selectedOrg));
-                  setOrg2(selectedOrg);
-                  toast.success(`Switched to ${selectedOrg.orgName != "None" ? selectedOrg.orgName : "Selected Org2"}`);
-                }
-              }}
-            >
-              <option value="" disabled>
-                Select an Org
-              </option>
-              {orgs.map((o, idx) => (
-                <option key={idx} value={o.instanceUrl}>
-                  {o.orgName != "None"
-                    ? `${o.orgName} || (${o.instanceUrl.replace("https://", "")})`
-                    : o.instanceUrl.replace("https://", "")}
+            <div className="relative">
+              <select
+                className="w-full bg-white text-blue-700 font-semibold rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-400 transition-all cursor-pointer truncate shadow-sm"
+                value={org2 || ""}
+                onChange={(e) => {
+                  const selectedOrg = orgs.find((o) => o.instanceUrl === e.target.value);
+                  if (selectedOrg) {
+                    sessionStorage.setItem("org2", JSON.stringify(selectedOrg));
+                    setOrg2(selectedOrg);
+                    toast.success(
+                      `Switched to ${selectedOrg.orgName !== "None" ? selectedOrg.orgName : "Selected Org2"
+                      }`
+                    );
+                  }
+                }}
+              >
+                <option value="" disabled>
+                  Select an Org
                 </option>
-              ))}
-            </select>
+                {orgs.map((o, idx) => (
+                  <option key={idx} value={o.instanceUrl} className="text-blue-700 bg-white border--gray-300">
+                    {o.orgName !== "None"
+                      ? `${o.orgName} || (${o.instanceUrl.replace("https://", "")})`
+                      : o.instanceUrl.replace("https://", "")}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
+
 
       {
         loading ? (

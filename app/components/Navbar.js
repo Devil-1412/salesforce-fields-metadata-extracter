@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
-import { Menu, X, UserCircle2 } from "lucide-react";
+import { Menu, X, LogOut, Settings, User, Sparkles } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
 export default function Navbar() {
@@ -104,114 +104,174 @@ export default function Navbar() {
 
     return (
         <>
-            <header className="sticky top-4 z-50 mx-auto w-[95%] md:w-[90%] bg-white/70 backdrop-blur-2xl border border-gray-200 shadow-md hover:shadow-xl rounded-2xl px-6 py-3 flex items-center justify-between transition-all duration-300">
-                {/* 🔹 Logo Section */}
-                <div className="flex items-center gap-3">
-                    <div className="bg-gradient-to-br from-blue-600 to-indigo-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-md hover:scale-105 transition-transform">
-                        <span className="text-white font-semibold text-lg">SF</span>
-                    </div>
-                    <Link
-                        href="/"
-                        className="text-2xl font-extrabold bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-500 bg-clip-text text-transparent tracking-tight hover:opacity-90 transition"
-                    >
-                        Metadata Extractor
-                    </Link>
-                </div>
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @keyframes slideDown {
+                    from {
+                        opacity: 0;
+                        transform: translateY(-10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: scale(0.95);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: scale(1);
+                    }
+                }
+                .animate-slideDown {
+                    animation: slideDown 0.3s ease-out;
+                }
+                .animate-fadeIn {
+                    animation: fadeIn 0.2s ease-out;
+                }
+            `}} />
 
-                {/* 🔹 Desktop Navigation */}
-                <nav className="hidden md:flex items-center gap-6">
-                    {navLinks.map(({ href, label }) => (
-                        <Link
-                            key={href}
-                            href={href}
-                            className="relative text-sm font-medium text-gray-700 hover:text-blue-700 transition group"
-                        >
-                            {label}
-                            <span className="absolute left-0 bottom-[-4px] w-0 h-[2px] bg-gradient-to-r from-blue-500 to-indigo-600 transition-all group-hover:w-full"></span>
-                        </Link>
-                    ))}
-                </nav>
-
-                {/* 🔹 Profile / Login */}
-                <div className="relative" ref={profileRef}>
-                    {isLoggedIn ? (
-                        <>
-                            <div
-                                onClick={() => setProfileOpen(!profileOpen)}
-                                className="bg-gradient-to-br from-blue-600 to-indigo-500 p-[2px] rounded-full cursor-pointer hover:scale-105 transition-transform"
-                            >
-                                <div className="bg-white rounded-full p-1">
-                                    <UserCircle2 className="w-8 h-8 text-blue-700" />
-                                </div>
-                            </div>
-
-                            {profileOpen && (
-                                <div className="absolute right-0 mt-3 bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden w-52 z-50 animate-fadeIn">
-                                    <div className="px-4 py-2 text-sm text-gray-600 border-b bg-gray-50 truncate">
-                                        {userEmail || "User"}
+            <header className="sticky top-0 z-50 w-full border-b border-gray-200/50 bg-white/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 shadow-sm">
+                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    <div className="flex h-16 items-center justify-between">
+                        {/* Logo Section */}
+                        <div className="flex items-center gap-3">
+                            <Link href="/" className="flex items-center gap-3 group">
+                                <div className="relative">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-xl blur-sm opacity-75 group-hover:opacity-100 transition-opacity"></div>
+                                    <div className="relative bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 w-11 h-11 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300">
+                                        <Sparkles className="w-6 h-6 text-white" />
                                     </div>
-                                    <Link
-                                        href="/profile"
-                                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50"
-                                    >
-                                        Profile
-                                    </Link>
-                                    <Link
-                                        href="/settings"
-                                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50"
-                                    >
-                                        Settings
-                                    </Link>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50"
-                                    >
-                                        Logout
-                                    </button>
                                 </div>
-                            )}
-                        </>
-                    ) : (
-                        <Link
-                            href="/login"
-                            className="hidden md:block bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:opacity-90 transition"
-                        >
-                            Login
-                        </Link>
-                    )}
+                                <div className="flex flex-col">
+                                    <span className="text-xl font-bold bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-600 bg-clip-text text-transparent leading-tight">
+                                        Metadata Extractor
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 font-medium -mt-1">Salesforce Tools</span>
+                                </div>
+                            </Link>
+                        </div>
 
-                    {/* 🔹 Mobile Menu Toggle */}
-                    <button
-                        onClick={() => setMenuOpen(!menuOpen)}
-                        className="md:hidden text-gray-700 hover:text-blue-600 transition"
-                    >
-                        {menuOpen ? <X size={26} /> : <Menu size={26} />}
-                    </button>
+                        {/* Desktop Navigation */}
+                        <nav className="hidden md:flex items-center gap-1">
+                            {navLinks.map(({ href, label }) => (
+                                <Link
+                                    key={href}
+                                    href={href}
+                                    className="relative px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-700 rounded-lg hover:bg-blue-50/50 transition-all duration-200 group"
+                                >
+                                    <span className="relative z-10">{label}</span>
+                                    <span className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"></span>
+                                </Link>
+                            ))}
+                        </nav>
+
+                        {/* Right Section */}
+                        <div className="flex items-center gap-3">
+                            {isLoggedIn ? (
+                                <div className="relative" ref={profileRef} id="nav-profile-wrapper">
+                                    <button
+                                        onClick={() => setProfileOpen(!profileOpen)}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors group"
+                                    >
+                                        <div className="relative">
+                                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full blur opacity-50 group-hover:opacity-75 transition-opacity"></div>
+                                            <div className="relative w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center shadow-md">
+                                                <User className="w-5 h-5 text-white" />
+                                            </div>
+                                        </div>
+                                        <span className="hidden lg:block text-sm font-medium text-gray-700 max-w-[120px] truncate">
+                                            {userEmail?.split('@')[0] || "User"}
+                                        </span>
+                                    </button>
+
+                                    {profileOpen && (
+                                        <div
+                                            id="nav-profile-menu"
+                                            className="absolute right-0 mt-2 w-64 bg-white/95 backdrop-blur-xl border border-gray-200/50 shadow-2xl rounded-2xl overflow-hidden z-50 animate-fadeIn"
+                                        >
+                                            <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200/50">
+                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Account</p>
+                                                <p className="text-sm font-medium text-gray-900 truncate">{userEmail || "User"}</p>
+                                            </div>
+                                            <div className="py-2">
+                                                <Link
+                                                    href="/profile"
+                                                    onClick={() => setProfileOpen(false)}
+                                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors group"
+                                                >
+                                                    <User className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                                                    <span>Profile</span>
+                                                </Link>
+                                                <Link
+                                                    href="/settings"
+                                                    onClick={() => setProfileOpen(false)}
+                                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors group"
+                                                >
+                                                    <Settings className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                                                    <span>Settings</span>
+                                                </Link>
+                                                <div className="my-1 h-px bg-gray-200"></div>
+                                                <button
+                                                    onClick={() => {
+                                                        setProfileOpen(false);
+                                                        handleLogout();
+                                                    }}
+                                                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors group"
+                                                >
+                                                    <LogOut className="w-4 h-4 text-red-400 group-hover:text-red-600 transition-colors" />
+                                                    <span>Logout</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <Link
+                                    href="/login"
+                                    className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+                                >
+                                    <span>Login</span>
+                                </Link>
+                            )}
+
+                            {/* Mobile Menu Toggle */}
+                            <button
+                                onClick={() => setMenuOpen(!menuOpen)}
+                                className="md:hidden p-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                                aria-label="Toggle menu"
+                            >
+                                {menuOpen ? <X size={24} /> : <Menu size={24} />}
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                {/* 🔹 Mobile Menu */}
+                {/* Mobile Menu */}
                 {menuOpen && (
                     <div
                         ref={menuRef}
-                        className="absolute top-[70px] left-0 w-full bg-white border-t border-gray-200 shadow-lg rounded-b-2xl md:hidden animate-slideDown"
+                        className="md:hidden border-t border-gray-200/50 bg-white/95 backdrop-blur-xl animate-slideDown"
                     >
-                        <nav className="flex flex-col items-center py-4 space-y-3">
+                        <nav className="mx-auto max-w-7xl px-4 py-4 space-y-1">
                             {navLinks.map(({ href, label }) => (
                                 <Link
                                     key={href}
                                     href={href}
                                     onClick={() => setMenuOpen(false)}
-                                    className="text-gray-700 text-base font-medium hover:text-blue-700 transition"
+                                    className="block px-4 py-3 text-base font-medium text-gray-700 hover:text-blue-700 hover:bg-blue-50/50 rounded-lg transition-colors"
                                 >
                                     {label}
                                 </Link>
                             ))}
-
                             {!isLoggedIn && (
                                 <Link
                                     href="/login"
-                                    className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-5 py-2 rounded-lg shadow-md hover:opacity-90 transition"
                                     onClick={() => setMenuOpen(false)}
+                                    className="block mt-4 px-4 py-3 text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all"
                                 >
                                     Login
                                 </Link>
@@ -221,8 +281,19 @@ export default function Navbar() {
                 )}
             </header>
 
-            {/* Toaster must be inside a client component */}
-            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+            {/* Toaster */}
+            <Toaster
+                position="top-right"
+                toastOptions={{
+                    duration: 4000,
+                    style: {
+                        background: '#fff',
+                        color: '#1f2937',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                    },
+                }}
+            />
         </>
     );
 }

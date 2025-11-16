@@ -534,21 +534,20 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
                 ({exportObjects.length || "All"})
               </span>
             </summary>
-            <div className="absolute z-200 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2" style={{ position: "absolute", top: "100%", overflow: "visible" }}>
-              {selectedObjects.map((t) => (
-                <label
-                  key={t}
-                  className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={exportObjects.includes(t)}
-                    onChange={() => toggleSelection(t, setExportObjects)}
-                    className="mr-2 accent-blue-600"
-                  />
-                  {t}
-                </label>
-              ))}
+            <div className="absolute z-20 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2">              {selectedObjects.map((t) => (
+              <label
+                key={t}
+                className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={exportObjects.includes(t)}
+                  onChange={() => toggleSelection(t, setExportObjects)}
+                  className="mr-2 accent-blue-600"
+                />
+                {t}
+              </label>
+            ))}
             </div>
           </details>
         </div>

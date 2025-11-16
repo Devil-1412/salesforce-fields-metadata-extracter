@@ -27,9 +27,8 @@ export default async function handler(req, res) {
         // Fetch organization linked to user
         const { data: org, error: orgError } = await supabase
             .from("organizations")
-            .select("org_email, instance_url")
+            .select("id, org_email, instance_url, is_sandbox")
             .eq("user_id", profile.id)
-            .maybeSingle();
 
         if (orgError)
             console.error("Organization fetch error:", orgError.message);

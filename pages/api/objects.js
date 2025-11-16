@@ -8,13 +8,15 @@ export default async function handler(req, res) {
   try {
     const conn = new jsforce.Connection({ accessToken, instanceUrl });
     const describe = await conn.describeGlobal();
+
     const object = describe.sobjects.map((obj) => ({
-        name: obj.name,
-        label: obj.label,
-        keyPrefix: obj.keyPrefix,
+      name: obj.name,
+      label: obj.label,
+      keyPrefix: obj.keyPrefix,
+      custom: obj.custom
     }));
 
-    res.status(200).json({ success: true, object });
+    res.status(200).json({ success: true, object, message: describe });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
