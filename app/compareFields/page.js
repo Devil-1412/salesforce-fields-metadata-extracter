@@ -4,8 +4,12 @@ import toast from "react-hot-toast";
 import { LayoutGrid, Columns } from "lucide-react";
 
 export default function CompareFields() {
-  const [selectedObjects, setSelectedObjects] = useState([]);
-  const [selectedObject, setSelectedObject] = useState("");
+  const [preselectedObjects, setPreselectedObjects] = useState([]);
+  const [orgSelectedObjects, setOrgSelectedObjects] = useState({});
+  const [orgSelectionDrafts, setOrgSelectionDrafts] = useState({});
+  const [comparisons, setComparisons] = useState([]);
+  const [activeComparisonId, setActiveComparisonId] = useState("");
+  const [orgObjectsMap, setOrgObjectsMap] = useState({});
   const [fieldData, setFieldData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orgs, setOrgs] = useState([]); // Array of organizations
@@ -22,6 +26,231 @@ export default function CompareFields() {
   const verticalScrollHandlersRef = useRef([]);
   const lastScrollPositionsRef = useRef([]);
   const isSyncingRef = useRef(false);
+  const validOrgs = useMemo(
+    () => orgs.filter((org) => org.accessToken && org.instanceUrl),
+    [orgs]
+  );
+
+  const orgObjectsToLoad = useMemo(() => {
+    const map = {};
+    validOrgs.forEach((org) => {
+      const selections = orgSelectedObjects[org.instanceUrl] || [];
+      map[org.instanceUrl] = Array.from(new Set(selections));
+    });
+    return map;
+  }, [validOrgs, orgSelectedObjects]);
+  const hasAnySelection = useMemo(
+    () => Object.values(orgSelectedObjects).some((items) => items.length > 0),
+    [orgSelectedObjects]
+  );
+
+  // Ensure there is always at least one comparison and active selection
+  useEffect(() => {
+    if (!comparisons.length) {
+      const defaultComparison = {
+        id: "cmp-1",
+        name: "Comparison 1",
+        sourceOrg: validOrgs[0]?.instanceUrl || "",
+        sourceObject: "",
+        targets: [],
+      };
+      setComparisons([defaultComparison]);
+      setActiveComparisonId(defaultComparison.id);
+      return;
+    }
+
+    if (!comparisons.some((cmp) => cmp.id === activeComparisonId)) {
+      setActiveComparisonId(comparisons[0].id);
+    }
+  }, [comparisons, activeComparisonId, validOrgs]);
+
+  // Fetch available objects for each connected org
+  useEffect(() => {
+    if (validOrgs.length === 0) {
+      setOrgObjectsMap({});
+      setOrgSelectedObjects({});
+      return;
+    }
+
+    let isCancelled = false;
+
+    const fetchOrgObjects = async () => {
+      const results = await Promise.all(
+        validOrgs.map(async (org) => {
+          try {
+            const res = await fetch("/api/objects", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accessToken: org.accessToken,
+                instanceUrl: org.instanceUrl,
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || "Failed to load objects");
+            }
+            return { key: org.instanceUrl, list: data.object || [] };
+          } catch (error) {
+            console.error("Error fetching objects for org:", org.instanceUrl, error);
+            toast.error(
+              `Failed to load objects for ${org.orgName !== "None" ? org.orgName : org.instanceUrl
+              }`
+            );
+            return { key: org.instanceUrl, list: [] };
+          }
+        })
+      );
+
+      if (isCancelled) return;
+
+      const map = results.reduce((acc, { key, list }) => {
+        acc[key] = list;
+        return acc;
+      }, {});
+      setOrgObjectsMap(map);
+    };
+
+    fetchOrgObjects();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [validOrgs]);
+
+  // Ensure each org maintains a selection list (at least one object when available)
+  useEffect(() => {
+    if (!validOrgs.length) {
+      setOrgSelectedObjects({});
+      return;
+    }
+    setOrgSelectedObjects((prev) => {
+      let changed = false;
+      const updated = {};
+
+      validOrgs.forEach((org, orgIndex) => {
+        const key = org.instanceUrl;
+        const options = orgObjectsMap[key] || [];
+        if (!options.length) {
+          if (prev[key] && prev[key].length) {
+            changed = true;
+          }
+          updated[key] = [];
+          return;
+        }
+
+        const prevList = (prev[key] || []).filter((obj) =>
+          options.some((opt) => opt.name === obj)
+        );
+
+        if (!prevList.length) {
+          const preferred = preselectedObjects.find((obj) =>
+            options.some((opt) => opt.name === obj)
+          );
+          const fallback =
+            preferred || options[orgIndex]?.name || options[0]?.name || "";
+          updated[key] = fallback ? [fallback] : [];
+          changed = true;
+        } else {
+          updated[key] = prevList;
+          if (!prev[key] || prev[key].length !== prevList.length) {
+            changed = true;
+          }
+        }
+      });
+
+      if (!changed) {
+        return prev;
+      }
+      return updated;
+    });
+  }, [validOrgs, orgObjectsMap, preselectedObjects]);
+
+  // Keep comparisons aligned with available orgs/objects
+  useEffect(() => {
+    if (!comparisons.length) return;
+
+    setComparisons((prev) => {
+      let changed = false;
+      const validOrgKeys = new Set(validOrgs.map((org) => org.instanceUrl));
+      const orgNameMap = Object.fromEntries(
+        validOrgs.map((org, idx) => [
+          org.instanceUrl,
+          org.orgName !== "None" ? org.orgName : `Org ${idx + 1}`,
+        ])
+      );
+
+      const updated = prev.map((comparison, cmpIdx) => {
+        let nextComparison = { ...comparison };
+
+        // Source org fallback
+        if (!nextComparison.sourceOrg || !validOrgKeys.has(nextComparison.sourceOrg)) {
+          nextComparison.sourceOrg = validOrgs[0]?.instanceUrl || "";
+          nextComparison.sourceObject = "";
+        }
+
+        const sourceOptions = orgSelectedObjects[nextComparison.sourceOrg] || [];
+        if (
+          nextComparison.sourceObject &&
+          !sourceOptions.includes(nextComparison.sourceObject)
+        ) {
+          nextComparison.sourceObject = "";
+        }
+        if (!nextComparison.sourceObject && sourceOptions.length) {
+          nextComparison.sourceObject = sourceOptions[0];
+        }
+
+        const filteredTargets = (nextComparison.targets || []).filter(
+          (target) =>
+            target.orgKey &&
+            validOrgKeys.has(target.orgKey) &&
+            target.orgKey !== nextComparison.sourceOrg
+        );
+
+        const normalizedTargets = filteredTargets.map((target) => {
+          const targetOptions = orgSelectedObjects[target.orgKey] || [];
+          let objectName = target.objectName;
+          if (objectName && !targetOptions.includes(objectName)) {
+            objectName = "";
+          }
+          if (!objectName && targetOptions.length) {
+            objectName = targetOptions[0];
+          }
+          return {
+            orgKey: target.orgKey,
+            objectName,
+            orgLabel: orgNameMap[target.orgKey] || target.orgKey,
+          };
+        });
+
+        if (normalizedTargets.length !== filteredTargets.length) {
+          changed = true;
+        }
+
+        nextComparison.targets = normalizedTargets;
+
+        const nameFallback = `Comparison ${cmpIdx + 1}`;
+        if (!nextComparison.name) {
+          nextComparison.name = nameFallback;
+          changed = true;
+        }
+
+        if (
+          nextComparison.sourceOrg !== comparison.sourceOrg ||
+          nextComparison.sourceObject !== comparison.sourceObject ||
+          nextComparison.name !== comparison.name ||
+          JSON.stringify(nextComparison.targets) !== JSON.stringify(comparison.targets)
+        ) {
+          changed = true;
+        }
+
+        return nextComparison;
+      });
+
+      if (!changed) return prev;
+      return updated;
+    });
+  }, [validOrgs, orgSelectedObjects]);
 
   // Load available orgs from API
   useEffect(() => {
@@ -37,6 +266,7 @@ export default function CompareFields() {
         });
         const data = await res.json();
         if (data.success) {
+
           setAvailableOrgs(data.data);
         }
       } catch (err) {
@@ -52,7 +282,7 @@ export default function CompareFields() {
     const org1 = JSON.parse(sessionStorage.getItem("org1"));
     const org2 = JSON.parse(sessionStorage.getItem("org2"));
 
-    setSelectedObjects(objs);
+    setPreselectedObjects(objs);
 
     // Initialize with default 2 orgs if available
     const initialOrgs = [];
@@ -69,12 +299,23 @@ export default function CompareFields() {
 
     setOrgs(initialOrgs);
   }, []);
-
   // Fetch fields metadata for all orgs
   useEffect(() => {
-    const validOrgs = orgs.filter(org => org.accessToken && org.instanceUrl);
-    if (validOrgs.length === 0 || !selectedObjects.length) {
+    if (validOrgs.length === 0) {
       setLoading(false);
+      setOrgsData([]);
+      setFieldData([]);
+      return;
+    }
+
+    const hasSelection = validOrgs.some(
+      (org) => (orgObjectsToLoad[org.instanceUrl] || []).length > 0
+    );
+
+    if (!hasSelection) {
+      setLoading(false);
+      setOrgsData([]);
+      setFieldData([]);
       return;
     }
 
@@ -82,37 +323,39 @@ export default function CompareFields() {
       try {
         setLoading(true);
         const responses = await Promise.all(
-          validOrgs.map(org =>
-            fetch("/api/fields", {
+          validOrgs.map(async (org) => {
+            const objects = orgObjectsToLoad[org.instanceUrl] || [];
+            if (!objects.length) {
+              return { success: true, data: {} };
+            }
+            const res = await fetch("/api/fields", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 accessToken: org.accessToken,
                 instanceUrl: org.instanceUrl,
-                objects: selectedObjects,
+                objects,
               }),
-            })
-          )
+            });
+            const data = await res.json();
+            return data;
+          })
         );
 
-        const dataArray = await Promise.all(responses.map(res => res.json()));
-
-        const hasError = dataArray.some(data => !data.success);
+        const hasError = responses.some((data) => !data.success);
         if (hasError) {
           toast.error("Error fetching fields from some organizations");
         }
 
-        setOrgsData(dataArray.map(data => data.data || {}));
+        setOrgsData(responses.map((data) => data.data || {}));
 
-        // extract all metadata keys dynamically from first successful response
-        const firstSuccessData = dataArray.find(data => data.success && data.data);
+        const firstSuccessData = responses.find((data) => data.success && data.data);
         if (firstSuccessData) {
           const sampleObj = Object.values(firstSuccessData.data)?.[0]?.[0] || {};
           const dynamicKeys = Object.keys(sampleObj);
           setMetadataOptions(dynamicKeys);
-          setSelectedMetadata(dynamicKeys.slice(0, 4)); // default: first 4
+          setSelectedMetadata((prev) => (prev.length ? prev : dynamicKeys.slice(0, 4)));
         }
-
       } catch (err) {
         toast.error("Comparison error: " + err.message);
       } finally {
@@ -120,80 +363,278 @@ export default function CompareFields() {
       }
     };
     fetchFieldsData();
-  }, [orgs, selectedObjects]);
+  }, [validOrgs, orgObjectsToLoad]);
+
+  const orgDataMap = useMemo(() => {
+    const map = {};
+    validOrgs.forEach((org, idx) => {
+      map[org.instanceUrl] = orgsData[idx] || {};
+    });
+    return map;
+  }, [validOrgs, orgsData]);
 
   useEffect(() => {
-    const fetchComparison = () => {
-      if (orgsData.length === 0) return;
-
-      // build comparison structure
-      const compared = selectedObjects.map((obj) => {
-        // Get fields from all orgs
-        const fieldsMaps = orgsData.map(orgData => {
-          const fields = orgData[obj] || [];
-          return Object.fromEntries(fields.map((f) => [f.ApiName, f]));
-        });
-
-        // Get all unique field names across all orgs
-        const allFields = new Set();
-        fieldsMaps.forEach(map => {
-          Object.keys(map).forEach(key => allFields.add(key));
-        });
-
-        const fields = Array.from(allFields).map((name) => {
-          // Get field data from each org
-          const fieldDataArray = fieldsMaps.map(map => map[name] || {});
-
-          // Check for differences across all orgs
-          const differences = selectedMetadata.reduce((acc, key) => {
-            const values = fieldDataArray.map(f => f[key]);
-            // Check if all values are the same
-            const allSame = values.every(val => val === values[0]);
-            if (!allSame) acc.push(key);
-            return acc;
-          }, []);
-
-          return {
-            fieldName: name,
-            fieldDataArray, // Array of field data for each org
-            diff: differences.length > 0,
-            diffKeys: differences,
-          };
-        });
-        return { objectName: obj, fields };
-      });
-      console.log(compared);
-      setFieldData(compared);
+    if (!comparisons.length) {
+      setFieldData([]);
+      return;
     }
-    fetchComparison();
-  }, [orgsData, selectedObjects, selectedMetadata]);
+
+    const orgLabelMap = Object.fromEntries(
+      validOrgs.map((org, idx) => [
+        org.instanceUrl,
+        org.orgName !== "None" ? org.orgName : `Org ${idx + 1}`,
+      ])
+    );
+
+    const comparisonData = comparisons.map((comparison) => {
+      const participants = [];
+
+      if (comparison.sourceOrg && comparison.sourceObject) {
+        participants.push({
+          orgKey: comparison.sourceOrg,
+          objectName: comparison.sourceObject,
+          orgLabel: orgLabelMap[comparison.sourceOrg] || comparison.sourceOrg,
+          role: "source",
+        });
+      }
+
+      (comparison.targets || []).forEach((target) => {
+        if (target.orgKey && target.objectName) {
+          participants.push({
+            orgKey: target.orgKey,
+            objectName: target.objectName,
+            orgLabel: orgLabelMap[target.orgKey] || target.orgKey,
+            role: "target",
+          });
+        }
+      });
+
+      const fieldMaps = participants.map(({ orgKey, objectName }) => {
+        if (!objectName) return {};
+        const objectFields = orgDataMap[orgKey]?.[objectName] || [];
+        return Object.fromEntries(objectFields.map((f) => [f.ApiName, f]));
+      });
+
+      const allFields = new Set();
+      fieldMaps.forEach((map) => {
+        Object.keys(map).forEach((key) => allFields.add(key));
+      });
+
+      const fields = Array.from(allFields).map((fieldName) => {
+        const fieldDataArray = fieldMaps.map((map) => map[fieldName] || {});
+        const differences = selectedMetadata.reduce((acc, key) => {
+          const values = fieldDataArray.map((f) =>
+            f[key] === undefined ? null : f[key]
+          );
+          const firstValue = values[0];
+          const allSame = values.every((val) => val === firstValue);
+          if (!allSame) acc.push(key);
+          return acc;
+        }, []);
+
+        return {
+          fieldName,
+          fieldDataArray,
+          diff: differences.length > 0,
+          diffKeys: differences,
+        };
+      });
+
+      return {
+        comparisonId: comparison.id,
+        comparisonName: comparison.name,
+        participants,
+        fields,
+      };
+    });
+
+    setFieldData(comparisonData);
+  }, [comparisons, orgDataMap, selectedMetadata, validOrgs]);
 
 
 
-  const currentObjectData = fieldData.find((f) => f.objectName === selectedObject);
+  const activeComparison = fieldData.find(
+    (f) => f.comparisonId === activeComparisonId
+  );
+  const activeParticipants = activeComparison?.participants || [];
 
   const filteredFields = useMemo(() => {
-    return (
-      currentObjectData?.fields?.filter((f) =>
-        filter === "all" ? true : filter === "different" ? f.diff : !f.diff
-      ) || []
+    if (!activeComparison) return [];
+    return activeComparison.fields.filter((f) =>
+      filter === "all" ? true : filter === "different" ? f.diff : !f.diff
     );
-  }, [filter, currentObjectData]);
+  }, [filter, activeComparison]);
 
-  const matchingCount = currentObjectData
-    ? currentObjectData.fields.filter((f) => !f.diff).length
+  const matchingCount = activeComparison
+    ? activeComparison.fields.filter((f) => !f.diff).length
     : 0;
-  const differentCount = currentObjectData
-    ? currentObjectData.fields.filter((f) => f.diff).length
+  const differentCount = activeComparison
+    ? activeComparison.fields.filter((f) => f.diff).length
     : 0;
-  const totalCount = currentObjectData ? currentObjectData.fields.length : 0;
+  const totalCount = activeComparison ? activeComparison.fields.length : 0;
   const diffPercent =
     totalCount > 0 ? Math.round((differentCount / totalCount) * 100) : 0;
+  const hasActiveData = !!activeComparison && activeParticipants.length >= 2;
 
   const toggleMetadata = (key) => {
     setSelectedMetadata((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
+  };
+  const handleOrgObjectAdd = (orgKey, value) => {
+    if (!value) return;
+    setOrgSelectedObjects((prev) => {
+      const existing = prev[orgKey] || [];
+      if (existing.includes(value)) return prev;
+      return {
+        ...prev,
+        [orgKey]: [...existing, value],
+      };
+    });
+    setOrgSelectionDrafts((prev) => ({ ...prev, [orgKey]: "" }));
+  };
+
+  const handleOrgObjectRemove = (orgKey, value) => {
+    setOrgSelectedObjects((prev) => {
+      const existing = prev[orgKey] || [];
+      if (!existing.includes(value)) return prev;
+      const filtered = existing.filter((item) => item !== value);
+      return {
+        ...prev,
+        [orgKey]: filtered,
+      };
+    });
+  };
+
+  const handleComparisonChange = (comparisonId, updater) => {
+    setComparisons((prev) =>
+      prev.map((comparison) =>
+        comparison.id === comparisonId
+          ? typeof updater === "function"
+            ? updater(comparison)
+            : { ...comparison, ...updater }
+          : comparison
+      )
+    );
+  };
+
+  const addComparison = () => {
+    if (!validOrgs.length) {
+      toast.error("Connect at least one org before adding comparisons");
+      return;
+    }
+    const newComparison = {
+      id: `cmp-${Date.now()}`,
+      name: `Comparison ${comparisons.length + 1 || 1}`,
+      sourceOrg: validOrgs[0]?.instanceUrl || "",
+      sourceObject: orgSelectedObjects[validOrgs[0]?.instanceUrl]?.[0] || "",
+      targets: [],
+    };
+    setComparisons((prev) => {
+      const comparison = {
+        ...newComparison,
+        name: `Comparison ${prev.length + 1}`,
+      };
+      return [...prev, comparison];
+    });
+    setActiveComparisonId(newComparison.id);
+  };
+
+  const removeComparison = (comparisonId) => {
+    setComparisons((prev) => {
+      if (prev.length <= 1) {
+        toast.error("At least one comparison is required");
+        return prev;
+      }
+      const filtered = prev.filter((cmp) => cmp.id !== comparisonId);
+      if (filtered.length && activeComparisonId === comparisonId) {
+        setActiveComparisonId(filtered[0].id);
+      }
+      return filtered;
+    });
+  };
+
+  const addComparisonTarget = (comparisonId) => {
+    handleComparisonChange(comparisonId, (comparison) => {
+      const availableTargets = validOrgs.filter(
+        (org) => org.instanceUrl !== comparison.sourceOrg
+      );
+      if (!availableTargets.length) {
+        toast.error("No organizations available for target mapping");
+        return comparison;
+      }
+      const nextOrgKey = availableTargets[0].instanceUrl;
+      const nextObjects = orgSelectedObjects[nextOrgKey] || [];
+      const target = {
+        orgKey: nextOrgKey,
+        objectName: nextObjects[0] || "",
+      };
+      return {
+        ...comparison,
+        targets: [...(comparison.targets || []), target],
+      };
+    });
+  };
+
+  const removeComparisonTarget = (comparisonId, targetIndex) => {
+    handleComparisonChange(comparisonId, (comparison) => {
+      const targets = [...(comparison.targets || [])];
+      targets.splice(targetIndex, 1);
+      return { ...comparison, targets };
+    });
+  };
+
+  const handleComparisonSourceOrgChange = (comparisonId, orgKey) => {
+    handleComparisonChange(comparisonId, (comparison) => {
+      if (comparison.sourceOrg === orgKey) return comparison;
+      const options = orgSelectedObjects[orgKey] || [];
+      const nextSource = options[0] || "";
+      const filteredTargets = (comparison.targets || []).filter(
+        (target) => target.orgKey !== orgKey
+      );
+      return {
+        ...comparison,
+        sourceOrg: orgKey,
+        sourceObject: nextSource,
+        targets: filteredTargets,
+      };
+    });
+  };
+
+  const handleComparisonSourceObjectChange = (comparisonId, objectName) => {
+    handleComparisonChange(comparisonId, { sourceObject: objectName });
+  };
+
+  const handleComparisonTargetOrgChange = (comparisonId, targetIndex, orgKey) => {
+    handleComparisonChange(comparisonId, (comparison) => {
+      const targets = [...(comparison.targets || [])];
+      const options = orgSelectedObjects[orgKey] || [];
+      targets[targetIndex] = {
+        orgKey,
+        objectName: options[0] || "",
+      };
+      return { ...comparison, targets };
+    });
+  };
+
+  const handleComparisonTargetObjectChange = (
+    comparisonId,
+    targetIndex,
+    objectName
+  ) => {
+    handleComparisonChange(comparisonId, (comparison) => {
+      const targets = [...(comparison.targets || [])];
+      if (!targets[targetIndex]) return comparison;
+      targets[targetIndex] = {
+        ...targets[targetIndex],
+        objectName,
+      };
+      return { ...comparison, targets };
+    });
+  };
+
+  const handleComparisonNameChange = (comparisonId, name) => {
+    handleComparisonChange(comparisonId, { name });
   };
 
   // Add a new org
@@ -224,12 +665,9 @@ export default function CompareFields() {
     setOrgs(updatedOrgs);
   };
 
-  // Get valid orgs (with access tokens)
-  const validOrgs = orgs.filter(org => org.accessToken && org.instanceUrl);
-
   // Synchronize scrolling for separate tables (horizontal and vertical when scroll lock is enabled)
   useEffect(() => {
-    if (displayMode !== "separate" || validOrgs.length === 0) {
+    if (displayMode !== "separate" || activeParticipants.length === 0) {
       scrollHandlersRef.current = [];
       verticalScrollHandlersRef.current = [];
       return;
@@ -318,7 +756,7 @@ export default function CompareFields() {
       scrollHandlersRef.current = [];
       verticalScrollHandlersRef.current = [];
     };
-  }, [displayMode, validOrgs.length, filteredFields.length, scrollLock]);
+  }, [displayMode, activeParticipants.length, filteredFields.length, scrollLock]);
 
 
 
@@ -450,47 +888,300 @@ export default function CompareFields() {
           <div className="text-center text-gray-600 mt-10">Loading field data...</div>
         ) : (
           <>
-            <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 flex flex-col md:flex-row justify-between items-center">
-              {/* Dropdown */}
-              <div className="flex flex-col items-start gap-2 w-full max-w-md">
-                <label className="text-sm font-semibold text-gray-700">Select Object</label>
-                <select
-                  value={selectedObject}
-                  onChange={(e) => setSelectedObject(e.target.value)}
-                  className="w-full appearance-none bg-white border border-gray-300 text-gray-800 text-base rounded-xl px-4 py-3 shadow-sm hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition duration-200 cursor-pointer"
+            <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8">
+              <div className="flex flex-col gap-5">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Object Selection</p>
+                  <p className="text-xs text-gray-500">
+                    Choose the objects for each org that you want to use in comparisons. One object per org is added
+                    by default, and you can add more as needed.
+                  </p>
+                </div>
+                {validOrgs.length > 0 ? (
+                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    {validOrgs.map((org, index) => {
+                      const key = org.instanceUrl;
+                      const label = org.orgName !== "None" ? org.orgName : `Org ${index + 1}`;
+                      const optionsList = orgObjectsMap[key] || [];
+                      const selections = orgSelectedObjects[key] || [];
+                      const isLoadingOptions = orgObjectsMap[key] === undefined;
+                      return (
+                        <div key={key} className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-gray-50/60 p-4 shadow-sm">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-700">{label}</p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {org.instanceUrl ? org.instanceUrl.replace("https://", "") : "Not connected"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2 min-h-[38px]">
+                            {selections.length === 0 ? (
+                              <span className="text-xs text-gray-500">No objects selected yet.</span>
+                            ) : (
+                              selections.map((obj) => (
+                                <span
+                                  key={obj}
+                                  className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs text-blue-700 shadow-sm"
+                                >
+                                  {obj}
+                                  <button
+                                    onClick={() => handleOrgObjectRemove(key, obj)}
+                                    className="text-red-500 hover:text-red-700"
+                                    title="Remove object"
+                                  >
+                                    ✕
+                                  </button>
+                                </span>
+                              ))
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={orgSelectionDrafts[key] || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (!value) return;
+                                handleOrgObjectAdd(key, value);
+                              }}
+                              disabled={isLoadingOptions || optionsList.length === 0}
+                              className="flex-1 appearance-none bg-white border border-gray-300 text-gray-800 text-sm rounded-xl px-3 py-2.5 shadow-sm hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 w-full"
+                            >
+                              <option value="">
+                                {isLoadingOptions
+                                  ? "Loading objects..."
+                                  : optionsList.length === 0
+                                    ? "No objects available"
+                                    : "Add object to compare"}
+                              </option>
+                              {optionsList.map((obj) => (
+                                <option key={obj.name} value={obj.name}>
+                                  {obj.label ? `${obj.label} (${obj.name})` : obj.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Connect at least one org to start selecting objects.
+                  </p>
+                )}
+                {validOrgs.length > 0 && !hasAnySelection && (
+                  <p className="text-xs text-gray-500">
+                    Choose at least one object per org to enable comparison mapping.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 space-y-6">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Comparison Logic</p>
+                  <p className="text-xs text-gray-500">
+                    Map a single source object to one or more destination objects. One-to-many comparisons are supported,
+                    but many-to-many mappings are not.
+                  </p>
+                </div>
+                <button
+                  onClick={addComparison}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
                 >
-                  <option value="" disabled>
-                    — Choose Object —
-                  </option>
-                  {selectedObjects.map((o) => (
-                    <option key={o} value={o} className="text-gray-700">
-                      {o}
-                    </option>
-                  ))}
-                </select>
+                  + Add Comparison
+                </button>
               </div>
 
-              {/* Summary Cards */}
-              {selectedObject && (
-                <div className="flex flex-wrap justify-center gap-3 text-center">
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 min-w-[120px] shadow-sm">
-                    <p className="text-blue-700 text-sm font-medium">Total Fields</p>
-                    <p className="text-xl font-bold text-blue-800">{totalCount}</p>
-                  </div>
-                  <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 min-w-[120px] shadow-sm">
-                    <p className="text-green-700 text-sm font-medium">Matching</p>
-                    <p className="text-xl font-bold text-green-800">{matchingCount}</p>
-                  </div>
-                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 min-w-[120px] shadow-sm">
-                    <p className="text-red-700 text-sm font-medium">Different</p>
-                    <p className="text-xl font-bold text-red-800">{differentCount}</p>
-                  </div>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 min-w-[120px] shadow-sm">
-                    <p className="text-yellow-700 text-sm font-medium">Difference %</p>
-                    <p className="text-xl font-bold text-yellow-800">{diffPercent}%</p>
-                  </div>
+              <div className="space-y-5">
+                {comparisons.map((comparison, idx) => {
+                  const sourceOptions = orgSelectedObjects[comparison.sourceOrg] || [];
+                  const availableTargetOrgs = validOrgs.filter(
+                    (org) => org.instanceUrl !== comparison.sourceOrg
+                  );
+                  return (
+                    <div key={comparison.id} className="border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-col gap-1 flex-1">
+                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Comparison Name
+                          </label>
+                          <input
+                            type="text"
+                            value={comparison.name || ""}
+                            onChange={(e) => handleComparisonNameChange(comparison.id, e.target.value)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                            placeholder={`Comparison ${idx + 1}`}
+                          />
+                        </div>
+                        {comparisons.length > 1 && (
+                          <button
+                            onClick={() => removeComparison(comparison.id)}
+                            className="text-red-600 text-sm font-medium hover:text-red-700"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                          <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Source Object</p>
+                          <select
+                            value={comparison.sourceOrg}
+                            onChange={(e) => handleComparisonSourceOrgChange(comparison.id, e.target.value)}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          >
+                            {validOrgs.map((org) => (
+                              <option key={org.instanceUrl} value={org.instanceUrl}>
+                                {org.orgName !== "None" ? org.orgName : org.instanceUrl.replace("https://", "")}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={comparison.sourceObject || ""}
+                            onChange={(e) => handleComparisonSourceObjectChange(comparison.id, e.target.value)}
+                            disabled={!sourceOptions.length}
+                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
+                          >
+                            {sourceOptions.length === 0 ? (
+                              <option value="">No objects available</option>
+                            ) : (
+                              sourceOptions.map((obj) => (
+                                <option key={obj} value={obj}>
+                                  {obj}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col gap-3 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Target Objects</p>
+                            <button
+                              onClick={() => addComparisonTarget(comparison.id)}
+                              className="text-xs font-semibold text-purple-600 hover:text-purple-800"
+                              disabled={!availableTargetOrgs.length}
+                            >
+                              + Add Target
+                            </button>
+                          </div>
+                          {(comparison.targets || []).length === 0 ? (
+                            <p className="text-xs text-gray-500">
+                              Map the source object to one or more targets (one-to-many supported).
+                            </p>
+                          ) : (
+                            (comparison.targets || []).map((target, targetIdx) => {
+                              const targetOptions = orgSelectedObjects[target.orgKey] || [];
+                              return (
+                                <div
+                                  key={`${comparison.id}-target-${targetIdx}`}
+                                  className="rounded-xl bg-white border border-gray-200 p-3 space-y-2 shadow-inner"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <select
+                                      value={target.orgKey}
+                                      onChange={(e) =>
+                                        handleComparisonTargetOrgChange(comparison.id, targetIdx, e.target.value)
+                                      }
+                                      className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+                                    >
+                                      {availableTargetOrgs.map((org) => (
+                                        <option key={org.instanceUrl} value={org.instanceUrl}>
+                                          {org.orgName !== "None"
+                                            ? org.orgName
+                                            : org.instanceUrl.replace("https://", "")}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      onClick={() => removeComparisonTarget(comparison.id, targetIdx)}
+                                      className="text-xs text-red-500 hover:text-red-700"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                  <select
+                                    value={target.objectName || ""}
+                                    onChange={(e) =>
+                                      handleComparisonTargetObjectChange(comparison.id, targetIdx, e.target.value)
+                                    }
+                                    disabled={!targetOptions.length}
+                                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs disabled:bg-gray-100 disabled:text-gray-400"
+                                  >
+                                    {targetOptions.length === 0 ? (
+                                      <option value="">No objects available</option>
+                                    ) : (
+                                      targetOptions.map((obj) => (
+                                        <option key={obj} value={obj}>
+                                          {obj}
+                                        </option>
+                                      ))
+                                    )}
+                                  </select>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    View Comparison
+                  </span>
+                  <select
+                    value={activeComparisonId}
+                    onChange={(e) => setActiveComparisonId(e.target.value)}
+                    className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  >
+                    {comparisons.map((cmp, idx) => (
+                      <option key={cmp.id} value={cmp.id}>
+                        {cmp.name || `Comparison ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
+                <div className="flex flex-wrap gap-2">
+                  {activeParticipants.map((participant, idx) => (
+                    <span
+                      key={`${participant.orgKey}-${idx}`}
+                      className={`inline-flex flex-col rounded-xl border px-3 py-2 text-[11px] shadow-sm ${participant.role === "source"
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-purple-200 bg-purple-50 text-purple-700"
+                        }`}
+                    >
+                      <span className="font-semibold">{participant.orgLabel}</span>
+                      <span className="text-gray-600">{participant.objectName || "No object selected"}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                  <p className="text-blue-700 text-xs font-medium uppercase">Total Fields</p>
+                  <p className="text-2xl font-bold text-blue-800">{totalCount}</p>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                  <p className="text-green-700 text-xs font-medium uppercase">Matching</p>
+                  <p className="text-2xl font-bold text-green-800">{matchingCount}</p>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                  <p className="text-red-700 text-xs font-medium uppercase">Different</p>
+                  <p className="text-2xl font-bold text-red-800">{differentCount}</p>
+                </div>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                  <p className="text-yellow-700 text-xs font-medium uppercase">Difference %</p>
+                  <p className="text-2xl font-bold text-yellow-800">{diffPercent}%</p>
+                </div>
+              </div>
             </section>
 
             {/* Metadata Dropdown */}
@@ -605,7 +1296,7 @@ export default function CompareFields() {
             </div>
 
             {/* Table */}
-            {selectedObject ? (
+            {hasActiveData ? (
               displayMode === "default" ? (
                 // Default Side-by-Side View
                 <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
@@ -613,23 +1304,37 @@ export default function CompareFields() {
                     <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
                       <tr>
                         {selectedMetadata.map((key) => (
-                          <th key={key} colSpan={validOrgs.length} className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
+                          <th
+                            key={key}
+                            colSpan={activeParticipants.length || 1}
+                            className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700"
+                          >
                             {key}
                           </th>
                         ))}
                       </tr>
                       <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
                         {selectedMetadata.map((key) =>
-                          validOrgs.map((org, orgIdx) => (
-                            <th key={`${key}-org${orgIdx}`} className="p-3 text-center text-xs font-semibold border-b border-blue-400/30">
-                              {org.orgName != "None" ? org.orgName : `Org ${orgIdx + 1}`}
-                            </th>
-                          ))
+                          (activeParticipants.length ? activeParticipants : [{ orgLabel: "Org", objectName: "—" }]).map(
+                            (participant, participantIdx) => (
+                              <th
+                                key={`${key}-participant-${participantIdx}`}
+                                className="p-3 text-center text-xs font-semibold border-b border-blue-400/30"
+                              >
+                                <div className="flex flex-col gap-1">
+                                  <span>{participant.orgLabel}</span>
+                                  <span className="text-[10px] font-normal text-blue-100">
+                                    {participant.objectName || "—"}
+                                  </span>
+                                </div>
+                              </th>
+                            )
+                          )
                         )}
                       </tr>
                     </thead>
 
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="border-t-1 border-gray-200">
                       {filteredFields.map((f, idx) => (
                         <tr
                           key={idx}
@@ -639,11 +1344,14 @@ export default function CompareFields() {
                             }`}
                         >
                           {selectedMetadata.map((key) =>
-                            validOrgs.map((org, orgIdx) => {
-                              const fieldData = f.fieldDataArray[orgIdx] || {};
+                            activeParticipants.map((participant, participantIdx) => {
+                              const fieldData = f.fieldDataArray[participantIdx] || {};
                               return (
-                                <td key={`${key}-${orgIdx}`} className="p-4 text-center text-gray-700 font-medium">
-                                  <span className="inline-block px-2 py-1 rounded-md bg-gray-50 text-gray-800">
+                                <td
+                                  key={`${key}-${participantIdx}`}
+                                  className="p-4 text-center text-gray-700 font-medium"
+                                >
+                                  <span className="inline-block px-2 py-1 rounded-md text-gray-800">
                                     {String(fieldData[key] ?? "—")}
                                   </span>
                                 </td>
@@ -662,12 +1370,15 @@ export default function CompareFields() {
                   className="overflow-y-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide"
                 >
                   <div className="flex gap-6 p-6">
-                    {validOrgs.map((org, orgIdx) => (
-                      <div key={orgIdx} className="flex-1 min-w-0 flex flex-col">
+                    {activeParticipants.map((participant, orgIdx) => (
+                      <div key={`${participant.orgKey}-${orgIdx}`} className="flex-1 min-w-0 flex flex-col">
                         <div className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg shadow-md">
                           <h3 className="text-sm font-bold text-white uppercase tracking-wide">
-                            {org.orgName != "None" ? org.orgName : `Org ${orgIdx + 1}`}
+                            {participant.orgLabel}
                           </h3>
+                          <p className="text-[11px] text-blue-100 font-medium truncate">
+                            {participant.objectName || "No object selected"}
+                          </p>
                         </div>
                         <div
                           ref={(el) => {
@@ -682,7 +1393,10 @@ export default function CompareFields() {
                             <thead className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white sticky top-0 z-10 shadow-sm border-t-0">
                               <tr>
                                 {selectedMetadata.map((key) => (
-                                  <th key={key} className="p-4 text-center font-bold text-xs uppercase tracking-wider whitespace-nowrap border-r border-blue-400/30 last:border-r-0">
+                                  <th
+                                    key={key}
+                                    className="p-4 text-center font-bold text-xs uppercase tracking-wider whitespace-nowrap border-r border-blue-400/30 last:border-r-0"
+                                  >
                                     {key}
                                   </th>
                                 ))}
@@ -700,7 +1414,10 @@ export default function CompareFields() {
                                       }`}
                                   >
                                     {selectedMetadata.map((key) => (
-                                      <td key={key} className="p-4 text-center text-gray-700 font-medium whitespace-nowrap border-r border-gray-100 last:border-r-0">
+                                      <td
+                                        key={key}
+                                        className="p-4 text-center text-gray-700 font-medium whitespace-nowrap border-r border-gray-100 last:border-r-0"
+                                      >
                                         <span className="inline-block px-3 py-1.5 rounded-lg bg-gray-50 text-gray-800 font-medium">
                                           {String(fieldData[key] ?? "—")}
                                         </span>
@@ -719,7 +1436,7 @@ export default function CompareFields() {
               )
             ) : (
               <p className="text-center text-gray-600 mt-6">
-                Please select an object to view field comparison.
+                Select a comparison with defined objects to view field data.
               </p>
             )}
           </>
