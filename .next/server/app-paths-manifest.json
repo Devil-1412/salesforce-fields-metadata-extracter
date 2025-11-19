@@ -1,3 +1,6 @@
 {
-  "/metadata/page": "app/metadata/page.js"
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/compare/page": "app/compare/page.js",
+  "/compareFields/page": "app/compareFields/page.js"
 }

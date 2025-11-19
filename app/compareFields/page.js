@@ -889,16 +889,16 @@ export default function CompareFields() {
         ) : (
           <>
             <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8">
-              <div className="flex flex-col gap-5">
-                <div>
-                  <p className="text-sm font-semibold text-gray-700">Object Selection</p>
-                  <p className="text-xs text-gray-500">
-                    Choose the objects for each org that you want to use in comparisons. One object per org is added
-                    by default, and you can add more as needed.
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-lg font-semibold text-gray-700">Object Selection</h3>
+                  <p className="text-sm text-gray-500">
+                    Choose the objects for each org that you want to include in comparisons. These selected objects
+                    become the building blocks for the comparison rules defined below.
                   </p>
                 </div>
                 {validOrgs.length > 0 ? (
-                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {validOrgs.map((org, index) => {
                       const key = org.instanceUrl;
                       const label = org.orgName !== "None" ? org.orgName : `Org ${index + 1}`;
@@ -906,12 +906,12 @@ export default function CompareFields() {
                       const selections = orgSelectedObjects[key] || [];
                       const isLoadingOptions = orgObjectsMap[key] === undefined;
                       return (
-                        <div key={key} className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-gray-50/60 p-4 shadow-sm">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-700">{label}</p>
-                            <p className="text-xs text-gray-500 truncate">
+                        <div key={key} className="flex flex-col gap-3 p-4 border border-gray-200 rounded-lg shadow-sm bg-white">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-semibold text-gray-700">{label}</span>
+                            <span className="text-xs text-gray-500 truncate">
                               {org.instanceUrl ? org.instanceUrl.replace("https://", "") : "Not connected"}
-                            </p>
+                            </span>
                           </div>
                           <div className="flex flex-wrap gap-2 min-h-[38px]">
                             {selections.length === 0 ? (
@@ -920,12 +920,12 @@ export default function CompareFields() {
                               selections.map((obj) => (
                                 <span
                                   key={obj}
-                                  className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs text-blue-700 shadow-sm"
+                                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700"
                                 >
                                   {obj}
                                   <button
                                     onClick={() => handleOrgObjectRemove(key, obj)}
-                                    className="text-red-500 hover:text-red-700"
+                                    className="text-gray-500 hover:text-red-500"
                                     title="Remove object"
                                   >
                                     ✕
@@ -934,31 +934,29 @@ export default function CompareFields() {
                               ))
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={orgSelectionDrafts[key] || ""}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                if (!value) return;
-                                handleOrgObjectAdd(key, value);
-                              }}
-                              disabled={isLoadingOptions || optionsList.length === 0}
-                              className="flex-1 appearance-none bg-white border border-gray-300 text-gray-800 text-sm rounded-xl px-3 py-2.5 shadow-sm hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition duration-200 cursor-pointer disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 w-full"
-                            >
-                              <option value="">
-                                {isLoadingOptions
-                                  ? "Loading objects..."
-                                  : optionsList.length === 0
-                                    ? "No objects available"
-                                    : "Add object to compare"}
+                          <select
+                            value={orgSelectionDrafts[key] || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (!value) return;
+                              handleOrgObjectAdd(key, value);
+                            }}
+                            disabled={isLoadingOptions || optionsList.length === 0}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
+                          >
+                            <option value="">
+                              {isLoadingOptions
+                                ? "Loading objects..."
+                                : optionsList.length === 0
+                                  ? "No objects available"
+                                  : "Add object to compare"}
+                            </option>
+                            {optionsList.map((obj) => (
+                              <option key={obj.name} value={obj.name}>
+                                {obj.label ? `${obj.label} (${obj.name})` : obj.name}
                               </option>
-                              {optionsList.map((obj) => (
-                                <option key={obj.name} value={obj.name}>
-                                  {obj.label ? `${obj.label} (${obj.name})` : obj.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                            ))}
+                          </select>
                         </div>
                       );
                     })}
@@ -977,14 +975,14 @@ export default function CompareFields() {
             </section>
 
             <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 space-y-6">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-gray-700">Comparison Logic</p>
-                  <p className="text-xs text-gray-500">
-                    Map a single source object to one or more destination objects. One-to-many comparisons are supported,
-                    but many-to-many mappings are not.
-                  </p>
-                </div>
+              <div className="flex flex-col gap-1">
+                <h3 className="text-lg font-semibold text-gray-700">Comparison Logic</h3>
+                <p className="text-sm text-gray-500">
+                  Map a single source object to one or more destination objects. One-to-many comparisons are supported,
+                  but many-to-many mappings are not.
+                </p>
+              </div>
+              <div className="flex justify-end">
                 <button
                   onClick={addComparison}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -993,7 +991,7 @@ export default function CompareFields() {
                 </button>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {comparisons.map((comparison, idx) => {
                   const sourceOptions = orgSelectedObjects[comparison.sourceOrg] || [];
                   const availableTargetOrgs = validOrgs.filter(

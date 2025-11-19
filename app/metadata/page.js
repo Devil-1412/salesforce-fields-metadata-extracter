@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function MetadataPage() {
@@ -104,87 +104,116 @@ export default function MetadataPage() {
   const [token, setToken] = useState("");
   const [instanceUrl, setInstanceUrl] = useState("");
   const [loading, setLoading] = useState(true);
+  const [objectSearch, setObjectSearch] = useState("");
+  const [lastSynced, setLastSynced] = useState("");
+  const [pinnedObjects, setPinnedObjects] = useState([]);
 
 
   // ✅ On mount
 
-  useEffect(() => {
+  const fetchAllData = useCallback(async () => {
+    setLoading(true);
     const t = sessionStorage.getItem("accessToken");
     const url = sessionStorage.getItem("instanceUrl");
     const selObjs = JSON.parse(sessionStorage.getItem("selectedObjects") || "[]");
-    if (!t || !url || selObjs.length === 0) return router.push("/");
+
+    if (!t || !url || selObjs.length === 0) {
+      setLoading(false);
+      router.push("/");
+      return;
+    }
 
     setToken(t);
     setInstanceUrl(url);
     setSelectedObjects(selObjs);
     setSelectedObject(selObjs[0]);
+    setRecordCounts({});
+    setFieldsData({});
+    setValidationRules([]);
+    setTriggers([]);
+    setApexClasses([]);
+    setWorkflows([]);
 
-    // Fetch all data 
-    const fetchAll = async () => {
-      try {
-        // Fetch field metadata
-        const res = await fetch("/api/fields", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: t, instanceUrl: url, objects: selObjs }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setFieldsData(data.data);
-          setSelectedObject(selObjs[0]);
-        }
-
-        // Fetch object details (API name, label, prefix)
-        const objRes = await fetch("/api/objects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: t, instanceUrl: url }),
-        });
-        const objData = await objRes.json();
-        if (objData.success) {
-          setObjectDetails(objData.object);
-        }
-
-        // Fetch record counts
-        for (const obj of selObjs) {
-          // Fire one request per object
-          fetch("/api/getRecordCount", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              accessToken: t,
-              instanceUrl: url,
-              objectName: obj,
-            }),
-          })
-            .then((res) => res.json())
-            .then((data) => {
-              // Update count as soon as one finishes, preserving previous
-              setRecordCounts((prev) => ({
-                ...prev,
-                [obj]: data.success ? data.count : "N/A",
-              }));
-            })
-            .catch(() => {
-              // Handle errors gracefully
-              setRecordCounts((prev) => ({
-                ...prev,
-                [obj]: "N/A",
-              }));
-            });
-        }
-
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+    try {
+      const fieldsRes = await fetch("/api/fields", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: t, instanceUrl: url, objects: selObjs }),
+      });
+      const fieldsPayload = await fieldsRes.json();
+      if (fieldsPayload.success) {
+        setFieldsData(fieldsPayload.data);
       }
-    };
 
-    fetchAll();
+      const objRes = await fetch("/api/objects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: t, instanceUrl: url }),
+      });
+      const objData = await objRes.json();
+      if (objData.success) {
+        setObjectDetails(objData.object);
+      }
 
-
+      for (const obj of selObjs) {
+        fetch("/api/getRecordCount", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accessToken: t,
+            instanceUrl: url,
+            objectName: obj,
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            setRecordCounts((prev) => ({
+              ...prev,
+              [obj]: data.success ? data.count : "N/A",
+            }));
+          })
+          .catch(() => {
+            setRecordCounts((prev) => ({
+              ...prev,
+              [obj]: "N/A",
+            }));
+          });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLastSynced(new Date().toLocaleString());
+      setLoading(false);
+    }
   }, [router]);
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
+
+  useEffect(() => {
+    setPinnedObjects((prev) => prev.filter((obj) => selectedObjects.includes(obj)));
+  }, [selectedObjects]);
+
+  const filteredObjects = useMemo(() => {
+    const query = objectSearch.trim().toLowerCase();
+    if (!query) return selectedObjects;
+    return selectedObjects.filter((obj) => obj.toLowerCase().includes(query));
+  }, [objectSearch, selectedObjects]);
+
+  const togglePin = (obj) => {
+    setPinnedObjects((prev) =>
+      prev.includes(obj) ? prev.filter((item) => item !== obj) : [...prev, obj]
+    );
+  };
+
+  const activeObjectDetails = useMemo(
+    () => objectDetails.find((obj) => obj.name === selectedObject),
+    [objectDetails, selectedObject]
+  );
+
+  const activeFields = fieldsData[selectedObject] || [];
+
 
   // ✅ Fetchers for each metadata type (called on tab switch)
   const fetchMetadataByType = async (type) => {
@@ -480,17 +509,17 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
       </div>
 
       {/* Table container */}
-      <div className="border border-gray-200 rounded-2xl overflow-auto flex-1 max-h-[75vh] min-h-[600px] shadow-inner">
-        <table className="min-w-full text-sm border-collapse table-auto">
-          <thead className="bg-blue-100 sticky top-0 z-10">
-            <tr>
-              <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700 w-12">
+      <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
+                  <table className="min-w-full text-sm border-collapse">
+                    <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
+            <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
+              <th className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
                 #
               </th>
               {selectedMetadata.map((meta) => (
                 <th
                   key={meta}
-                  className="border border-gray-300 p-2 text-left font-semibold text-gray-700 capitalize"
+                  className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700"
                 >
                   {meta.replace(/([A-Z])/g, " $1")}
                 </th>
@@ -498,11 +527,11 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
             </tr>
           </thead>
 
-          <tbody>
+          <tbody className="divide-y divide-gray-100">
             {filteredFields.map((f, i) => (
               <tr
                 key={`${selectedObject}-${i}`}
-                className="hover:bg-blue-50 transition border-b border-gray-100"
+                className="bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300"
               >
                 <td className="border border-gray-200 p-2 text-gray-600 text-center w-12">
                   {i + 1}
@@ -748,9 +777,9 @@ function WorkflowsTable({ data = [] }) {
   );
 
   return (
-    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
-      <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-green-100 sticky top-0 z-10">
+    <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
+    <table className="min-w-full text-sm border-collapse">
+      <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
           <tr>
             {allKeys.map((key) => (
               <th
