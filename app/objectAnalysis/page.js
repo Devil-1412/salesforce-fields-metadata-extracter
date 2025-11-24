@@ -29,12 +29,11 @@ export default function ObjectAnalysisPage() {
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
-  const [selected, setSelected] = useState([]);
   const [counts, setCounts] = useState({});
   const [countLoadingFor, setCountLoadingFor] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [lastUpdated, setLastUpdated] = useState("");
+  const [selectedObject, setSelectedObject] = useState(null);
 
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
@@ -74,7 +73,6 @@ export default function ObjectAnalysisPage() {
       setSelectedOrgMeta(org);
       setToken(org.accessToken);
       setInstanceUrl(org.instanceUrl);
-      setSelected([]);
       setCounts({});
       sessionStorage.setItem("accessToken", org.accessToken);
       sessionStorage.setItem("instanceUrl", org.instanceUrl);
@@ -115,7 +113,6 @@ export default function ObjectAnalysisPage() {
           throw new Error(data.error || "Could not load objects.");
         }
         setObjects(Array.isArray(data.object) ? data.object : []);
-        setLastUpdated(new Date().toISOString());
         if (showToast) {
           toast.success("Object list refreshed");
         }
@@ -136,12 +133,6 @@ export default function ObjectAnalysisPage() {
       loadObjects();
     }
   }, [instanceUrl, token, loadObjects]);
-
-  useEffect(() => {
-    setSelected((prev) =>
-      prev.filter((name) => objects.some((object) => object.name === name))
-    );
-  }, [objects]);
 
   const filteredObjects = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -167,32 +158,10 @@ export default function ObjectAnalysisPage() {
     return {
       total,
       custom,
-      standard,
-      selected: selected.length,
+      standard
     };
-  }, [objects, selected.length]);
+  }, [objects]);
 
-  const handleCheck = (objectName) => {
-    setSelected((prev) =>
-      prev.includes(objectName)
-        ? prev.filter((name) => name !== objectName)
-        : [...prev, objectName]
-    );
-  };
-
-  const handleSelectVisible = useCallback(() => {
-    if (!filteredObjects.length) return;
-    setSelected((prev) => {
-      const visibleNames = filteredObjects.map((object) => object.name);
-      const allVisibleSelected = visibleNames.every((name) => prev.includes(name));
-      if (allVisibleSelected) {
-        return prev.filter((name) => !visibleNames.includes(name));
-      }
-      return Array.from(new Set([...prev, ...visibleNames]));
-    });
-  }, [filteredObjects]);
-
-  const clearSelection = () => setSelected([]);
 
   const fetchRecordCount = useCallback(
     async (objectName) => {
@@ -224,26 +193,40 @@ export default function ObjectAnalysisPage() {
     [instanceUrl, token]
   );
 
-  const handleExtract = () => {
-    if (!selected.length) {
-      toast.error("Select at least one object first.");
-      return;
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  const handleObjectClick = async (object) => {
+    if (!instanceUrl || !token) return;
+
+    const toastId = toast.loading(`Fetching details for ${object.label}...`);
+
+    try {
+      const res = await fetch("/api/getObjectDetails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessToken: token,
+          instanceUrl,
+          objectName: object.name
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setSelectedObject({ ...object, ...data.data });
+        toast.success("Details loaded", { id: toastId });
+      } else {
+        throw new Error(data.error || "Failed to fetch details");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(`Error: ${err.message}`, { id: toastId });
     }
-    sessionStorage.setItem("selectedObjects", JSON.stringify(selected));
-    router.push("/metadata");
   };
 
-  const allVisibleSelected =
-    filteredObjects.length > 0 &&
-    filteredObjects.every((object) => selected.includes(object.name));
-
-  const formattedLastUpdated = lastUpdated
-    ? new Date(lastUpdated).toLocaleString()
-    : "Awaiting refresh";
-
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <div className="min-h-screen bg-slate-50 py-6 px-3 sm:px-3">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-2xl">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
@@ -255,51 +238,48 @@ export default function ObjectAnalysisPage() {
                 quickly extract metadata for analysis.
               </p>
             </div>
-            <div className="flex flex-col gap-2 text-sm">
-              <div className="text-slate-200">Connected organization</div>
-              <div className="flex gap-2">
-                <select
-                  className="w-full rounded-2xl border border-white/30 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-white/70 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/60 md:w-auto"
-                  value={selectedOrgId || ""}
-                  onChange={(event) => selectOrg(event.target.value)}
-                  disabled={orgLoading || !orgs.length}
-                >
-                  <option value="" disabled>
-                    {orgLoading ? "Loading orgs..." : "Select an org"}
-                  </option>
-                  {orgs.map((org) => (
-                    <option key={org.instanceUrl} value={org.instanceUrl} className="text-black">
-                      {org.orgName && org.orgName !== "None"
-                        ? `${org.orgName} • ${org.instanceUrl.replace("https://", "")}`
-                        : org.instanceUrl.replace("https://", "")}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => loadOrgs()}
-                  className="rounded-2xl border border-white/40 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20"
-                  disabled={orgLoading}
-                >
-                  Refresh orgs
-                </button>
+            <div className="flex flex-col items-end gap-3">
+              <div className="relative group">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-50 transition duration-500"></div>
+                <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-1 shadow-lg">
+                  <div className="hidden sm:block px-3 text-xs font-bold text-blue-100 uppercase tracking-wider select-none">
+                    Active Org
+                  </div>
+                  <div className="hidden sm:block h-6 w-px bg-white/20 mx-1"></div>
+                  <div className="relative">
+                    <select
+                      className="bg-transparent text-white text-sm font-semibold focus:outline-none cursor-pointer py-2 pl-3 pr-10 appearance-none min-w-[220px] hover:text-blue-50 transition-colors"
+                      value={selectedOrgId || ""}
+                      onChange={(event) => selectOrg(event.target.value)}
+                      disabled={orgLoading || !orgs.length}
+                    >
+                      <option value="" disabled className="text-gray-500 bg-white">
+                        {orgLoading ? "Loading..." : "Select Organization"}
+                      </option>
+                      {orgs.map((org) => (
+                        <option key={org.instanceUrl} value={org.instanceUrl} className="text-gray-900 bg-white py-2">
+                          {org.orgName && org.orgName !== "None" ? org.orgName : "Salesforce Org"}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/80">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <span className="text-xs text-white/80">
-                {selectedOrgMeta?.instanceUrl
-                  ? selectedOrgMeta.instanceUrl.replace("https://", "")
-                  : "No org selected"}
-              </span>
+
+              {selectedOrgMeta?.instanceUrl && (
+                <div className="flex items-center gap-2 text-xs text-blue-50 bg-black/20 px-3 py-1.5 rounded-full border border-white/10 shadow-sm backdrop-blur-sm transition-all hover:bg-black/30">
+                  <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]"></div>
+                  <span className="font-mono tracking-tight opacity-90">
+                    {selectedOrgMeta.instanceUrl.replace("https://", "").replace(".my.salesforce.com", "")}
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-4 text-xs">
-            <span className="rounded-full bg-white/20 px-3 py-1">
-              Last fetched: {formattedLastUpdated}
-            </span>
-            <span className="rounded-full bg-white/20 px-3 py-1">
-              Objects: {objects.length}
-            </span>
-            <span className="rounded-full bg-white/20 px-3 py-1">
-              Selected: {selected.length}
-            </span>
           </div>
         </section>
 
@@ -339,33 +319,7 @@ export default function ObjectAnalysisPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-slate-500">
-                Selected objects:{" "}
-                <span className="font-semibold text-slate-800">
-                  {stats.selected}
-                </span>
-              </p>
-              {selected.length > 0 && (
-                <p className="text-xs text-slate-400">
-                  {selected.slice(0, 3).join(", ")}
-                  {selected.length > 3 && ` +${selected.length - 3} more`}
-                </p>
-              )}
-            </div>
             <div className="flex gap-2">
-              <button
-                onClick={handleSelectVisible}
-                className="rounded-2xl border border-blue-500 px-4 py-2 text-sm font-medium text-blue-600 transition hover:bg-blue-50"
-              >
-                {allVisibleSelected ? "Deselect page" : "Select page"}
-              </button>
-              <button
-                onClick={clearSelection}
-                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Clear selection
-              </button>
               <button
                 onClick={() => loadObjects({ showToast: true })}
                 disabled={!selectedOrgId || loading}
@@ -421,16 +375,13 @@ export default function ObjectAnalysisPage() {
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 sticky top-0">
                   <tr>
                     <th className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={handleSelectVisible}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
+                      #
                     </th>
                     <th className="px-4 py-3">Label</th>
                     <th className="px-4 py-3">API Name</th>
                     <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Created</th>
+                    <th className="px-4 py-3">Last Modified</th>
                     <th className="px-4 py-3">ID Prefix</th>
                     <th className="px-4 py-3 text-right">Records</th>
                   </tr>
@@ -444,19 +395,47 @@ export default function ObjectAnalysisPage() {
                       }
                     >
                       <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.includes(object.name)}
-                          onChange={() => handleCheck(object.name)}
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
+                        {index + 1}
                       </td>
                       <td className="px-4 py-3 font-medium text-slate-900">
-                        {object.label || object.name}
+                        <button
+                          onClick={() => handleObjectClick(object)}
+                          className="hover:text-blue-600 hover:underline text-left"
+                        >
+                          {object.label || object.name}
+                        </button>
                       </td>
                       <td className="px-4 py-3">{object.name}</td>
                       <td className="px-4 py-3">
                         {object.custom ? "Custom" : "Standard"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {object.createdDate ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-900">
+                              {new Date(object.createdDate).toLocaleDateString() == "1/1/1970" ? "—" : new Date(object.createdDate).toLocaleDateString()}
+                            </span>
+                            <span className="text-[10px] text-gray-500">
+                              {object.createdByName || "Unknown"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {object.lastModifiedDate ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-900">
+                              {new Date(object.lastModifiedDate).toLocaleDateString() == "1/1/1970" ? "—" : new Date(object.lastModifiedDate).toLocaleDateString()}
+                            </span>
+                            <span className="text-[10px] text-gray-500">
+                              {object.lastModifiedByName || "Unknown"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">{object.keyPrefix || "—"}</td>
                       <td className="px-4 py-3 text-right">
@@ -476,28 +455,206 @@ export default function ObjectAnalysisPage() {
                   ))}
                 </tbody>
               </table>
+
             ) : (
               <div className="flex h-48 items-center justify-center text-sm text-slate-500">
                 No objects match your search or filter.
               </div>
             )}
           </div>
-        </section>
+        </section >
+      </div >
 
-        <div className="flex flex-col gap-3 rounded-3xl bg-white p-6 text-sm text-slate-500 shadow-xl md:flex-row md:items-center md:justify-between">
-          <p>
-            Selected objects:{" "}
-            <strong className="text-slate-700">{selected.length}</strong>
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={handleExtract}
-              disabled={!selected.length}
-              className="rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Extract metadata
-            </button>
+      {/* Object Details Modal */}
+      {
+        selectedObject && (
+          <ObjectDetailsModal
+            object={selectedObject}
+            onClose={() => setSelectedObject(null)}
+          />
+        )
+      }
+    </div >
+  );
+}
+
+function ObjectDetailsModal({ object, onClose }) {
+  // Helper to format boolean flags
+  const BooleanFlag = ({ label, value }) => (
+    <div className={`flex items-center justify-between p-3 rounded-xl border ${value ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100'}`}>
+      <span className="text-sm font-medium text-gray-700">{label}</span>
+      {value ? (
+        <span className="text-green-600">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        </span>
+      ) : (
+        <span className="text-gray-400">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex justify-between items-start bg-gradient-to-r from-gray-50 to-white">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-2xl font-bold text-gray-900">{object.label}</h2>
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${object.custom ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                {object.custom ? 'Custom Object' : 'Standard Object'}
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-gray-500">
+              <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{object.name}</span>
+              <span>•</span>
+              <span>Key Prefix: <span className="font-mono text-gray-700">{object.keyPrefix || 'N/A'}</span></span>
+            </div>
           </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-y-auto p-6 space-y-8">
+
+          {/* Flags Grid */}
+          <section>
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Object Capabilities</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <BooleanFlag label="Createable" value={object.createable} />
+              <BooleanFlag label="Deletable" value={object.deletable} />
+              <BooleanFlag label="Updateable" value={object.updateable} />
+              <BooleanFlag label="Queryable" value={object.queryable} />
+              <BooleanFlag label="Searchable" value={object.searchable} />
+              <BooleanFlag label="Triggerable" value={object.triggerable} />
+              <BooleanFlag label="Replicateable" value={object.replicateable} />
+              <BooleanFlag label="Retrieveable" value={object.retrieveable} />
+              <BooleanFlag label="Layoutable" value={object.layoutable} />
+              <BooleanFlag label="Feed Enabled" value={object.feedEnabled} />
+              <BooleanFlag label="Compact Layout" value={object.compactLayoutable} />
+              <BooleanFlag label="Mergeable" value={object.mergeable} />
+            </div>
+          </section>
+
+          {/* URLs */}
+          {object.urls && (
+            <section>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">API Resources</h3>
+              <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                <div className="grid grid-cols-1 divide-y divide-gray-200">
+                  {Object.entries(object.urls).map(([key, url]) => (
+                    <div key={key} className="flex flex-col md:flex-row md:items-center p-3 hover:bg-gray-100 transition-colors">
+                      <span className="w-40 text-sm font-semibold text-gray-600 capitalize mb-1 md:mb-0">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      <code className="text-xs text-blue-600 font-mono break-all">{url}</code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Record Types */}
+          {object.recordTypeInfos && object.recordTypeInfos.length > 0 && (
+            <section>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Record Types</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {object.recordTypeInfos.map((rt) => (
+                  <div key={rt.recordTypeId} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-semibold text-gray-800">{rt.name}</h4>
+                      {rt.master && <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-0.5 rounded-full">Master</span>}
+                    </div>
+                    <div className="text-xs text-gray-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Available:</span>
+                        <span className={rt.available ? "text-green-600" : "text-red-600"}>{rt.available ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Default:</span>
+                        <span className={rt.defaultRecordTypeMapping ? "text-green-600" : "text-gray-500"}>{rt.defaultRecordTypeMapping ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>ID:</span>
+                        <span className="font-mono">{rt.recordTypeId}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Supported Scopes */}
+          {object.supportedScopes && object.supportedScopes.length > 0 && (
+            <section>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Supported Scopes</h3>
+              <div className="flex flex-wrap gap-2">
+                {object.supportedScopes.map((scope) => (
+                  <div key={scope.name} className="bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg px-3 py-1.5 text-sm">
+                    <span className="font-semibold">{scope.label}</span>
+                    <span className="text-indigo-400 mx-1">|</span>
+                    <span className="font-mono text-xs">{scope.name}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Child Relationships */}
+          {object.childRelationships && object.childRelationships.length > 0 && (
+            <section>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Child Relationships</h3>
+              <div className="overflow-hidden border border-gray-200 rounded-xl">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child Object</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Relationship Name</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cascade Delete</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {object.childRelationships.map((rel, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{rel.childSObject}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{rel.field}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{rel.relationshipName || '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {rel.cascadeDelete ? (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Yes</span>
+                          ) : (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">No</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end rounded-b-3xl">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

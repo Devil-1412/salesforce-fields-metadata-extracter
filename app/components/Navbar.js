@@ -3,16 +3,22 @@
 
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
-import { Menu, X, LogOut, Settings, User, Sparkles } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Menu, X, LogOut, Settings, User, Sparkles, ChevronDown } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
 export default function Navbar() {
+    const nextPathname = usePathname();
+    const [pathname, setPathname] = useState(typeof window !== "undefined" ? window.location.pathname : "");
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [userEmail, setUserEmail] = useState("");
     const [menuOpen, setMenuOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [activeDropdown, setActiveDropdown] = useState(null);
     const menuRef = useRef(null);
     const profileRef = useRef(null);
+    // Dropdown show/hide with delay
+    const [showDropdown, setShowDropdown] = useState(false);
 
 
     useEffect(() => {
@@ -33,6 +39,10 @@ export default function Navbar() {
         };
     }, []);
 
+    useEffect(() => {
+        setPathname(nextPathname);
+    }, [nextPathname]);
+
     const handleLogout = () => {
         sessionStorage.clear();
         setIsLoggedIn(false);
@@ -48,10 +58,23 @@ export default function Navbar() {
         { href: "/about", label: "About" },
     ];
 
+    // Dropdown structure for private nav
     const privateNav = [
         { href: "/", label: "Dashboard" },
-        { href: "/objectAnalysis", label: "Object & Fields" },
-        { href: "/compare", label: "Compare Orgs" },
+        {
+            label: "Object Analysis",
+            dropdown: [
+                { href: "/objectAnalysis", label: "Object Analysis" },
+                { href: "/metadata", label: "Metadata" },
+            ],
+        },
+        {
+            label: "Compare Orgs",
+            dropdown: [
+                { href: "/compare", label: "Compare" },
+                { href: "/compareFields", label: "Compare Fields" },
+            ],
+        },
         { href: "/tools", label: "Tools" },
     ];
 
@@ -85,6 +108,21 @@ export default function Navbar() {
         };
     }, [isLoggedIn]);
 
+    const handleDropdownToggle = (label) => {
+        setActiveDropdown((prev) => (prev === label ? null : label));
+    };
+
+    const handleClickOutside = (e) => {
+        if (!e.target.closest(".dropdown-container")) {
+            setActiveDropdown(null);
+        }
+    };
+
+    useEffect(() => {
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (
@@ -107,24 +145,12 @@ export default function Navbar() {
             <style dangerouslySetInnerHTML={{
                 __html: `
                 @keyframes slideDown {
-                    from {
-                        opacity: 0;
-                        transform: translateY(-10px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
                 @keyframes fadeIn {
-                    from {
-                        opacity: 0;
-                        transform: scale(0.95);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: scale(1);
-                    }
+                    from { opacity: 0; transform: scale(0.95); }
+                    to { opacity: 1; transform: scale(1); }
                 }
                 .animate-slideDown {
                     animation: slideDown 0.3s ease-out;
@@ -132,6 +158,25 @@ export default function Navbar() {
                 .animate-fadeIn {
                     animation: fadeIn 0.2s ease-out;
                 }
+                .nav-active {
+                    color: #1d4ed8;
+                    background: #f3f4f6;
+                    font-weight: 700;
+                    box-shadow: 0 2px 8px -2px #1d4ed822;
+                    transition: background 0.2s, color 0.2s, border-bottom 0.2s;
+                }
+                .nav-notActive {
+                    color: #374151;
+                    font-weight: 500;
+                    background: transparent;
+                    border-bottom: 2px solid transparent;
+                    transition: background 0.2s, color 0.2s, border-bottom 0.2s;
+                }
+                .nav-notActive:hover {
+                    color: #1d4ed8;
+                    background: #e0e7ff;
+                }
+
             `}} />
 
             <header className="sticky top-0 z-50 w-full border-b border-gray-200/50 bg-white/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 shadow-sm">
@@ -157,16 +202,50 @@ export default function Navbar() {
 
                         {/* Desktop Navigation */}
                         <nav className="hidden md:flex items-center gap-1">
-                            {navLinks.map(({ href, label }) => (
-                                <Link
-                                    key={href}
-                                    href={href}
-                                    className="relative px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-700 rounded-lg hover:bg-blue-50/50 transition-all duration-200 group"
-                                >
-                                    <span className="relative z-10">{label}</span>
-                                    <span className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"></span>
-                                </Link>
-                            ))}
+                            {navLinks.map((nav) => {
+                                if (nav.dropdown) {
+                                    const isDropdownActive = nav.dropdown.some((opt) => pathname === opt.href);
+                                    return (
+                                        <div
+                                            key={nav.label}
+                                            className="relative dropdown-container"
+                                        >
+                                            <button
+                                                onClick={() => handleDropdownToggle(nav.label)}
+                                                className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${isDropdownActive ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
+                                            >
+                                                <span>{nav.label}</span>
+                                                <ChevronDown className="w-4 h-4 text-gray-400" />
+                                            </button>
+                                            {activeDropdown === nav.label && (
+                                                <div className="absolute left-0 mt-2 min-w-[180px] bg-white border border-gray-200 shadow-xl rounded-xl z-40 animate-fadeIn">
+                                                    {nav.dropdown.map((opt) => (
+                                                        <Link
+                                                            key={opt.href}
+                                                            href={opt.href}
+                                                            onClick={() => setActiveDropdown(null)}
+                                                            className={`block px-4 py-2 text-sm rounded-lg transition-colors ${pathname === opt.href ? "nav-active" : "nav-notActive"}`}
+                                                        >
+                                                            {opt.label}
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }
+                                // Regular nav
+                                return (
+                                    <Link
+                                        key={nav.href}
+                                        href={nav.href}
+                                        className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${pathname === nav.href ? "nav-active" : "nav-notActive"}`}
+                                    >
+                                        <span className="relative z-10">{nav.label}</span>
+                                        <span className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"></span>
+                                    </Link>
+                                );
+                            })}
                         </nav>
 
                         {/* Right Section */}
@@ -257,16 +336,41 @@ export default function Navbar() {
                         className="md:hidden border-t border-gray-200/50 bg-white/95 backdrop-blur-xl animate-slideDown"
                     >
                         <nav className="mx-auto max-w-7xl px-4 py-4 space-y-1">
-                            {navLinks.map(({ href, label }) => (
-                                <Link
-                                    key={href}
-                                    href={href}
-                                    onClick={() => setMenuOpen(false)}
-                                    className="block px-4 py-3 text-base font-medium text-gray-700 hover:text-blue-700 hover:bg-blue-50/50 rounded-lg transition-colors"
-                                >
-                                    {label}
-                                </Link>
-                            ))}
+                            {navLinks.map((nav, idx) => {
+                                if (nav.dropdown) {
+                                    const isDropdownActive = nav.dropdown.some(opt => opt.href === pathname);
+                                    return (
+                                        <details key={nav.label} className="mb-2">
+                                            <summary className={`flex items-center gap-2 px-4 py-3 text-base font-medium rounded-lg cursor-pointer ${isDropdownActive ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}>
+                                                {nav.label}
+                                                <ChevronDown className="w-4 h-4 text-gray-400" />
+                                            </summary>
+                                            <div className="ml-4">
+                                                {nav.dropdown.map(opt => (
+                                                    <Link
+                                                        key={opt.href}
+                                                        href={opt.href}
+                                                        onClick={() => setMenuOpen(false)}
+                                                        className={`block px-4 py-2 text-base rounded-lg transition-colors ${pathname === opt.href ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
+                                                    >
+                                                        {opt.label}
+                                                    </Link>
+                                                ))}
+                                            </div>
+                                        </details>
+                                    );
+                                }
+                                return (
+                                    <Link
+                                        key={nav.href}
+                                        href={nav.href}
+                                        onClick={() => setMenuOpen(false)}
+                                        className={`block px-4 py-3 text-base font-medium rounded-lg transition-colors ${pathname === nav.href ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
+                                    >
+                                        {nav.label}
+                                    </Link>
+                                );
+                            })}
                             {!isLoggedIn && (
                                 <Link
                                     href="/login"

@@ -641,6 +641,32 @@ export default function ProfilePage() {
                                                     </button>
                                                 )}
                                             </div>
+                                            {org.apiUsage && (
+                                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className="text-xs font-medium text-gray-500">API Usage</span>
+                                                        <span className="text-xs font-medium text-gray-700">
+                                                            {org.apiUsage.used?.toLocaleString()} / {org.apiUsage.limit?.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                                        <div
+                                                            className={`h-1.5 rounded-full ${(org.apiUsage.used / org.apiUsage.limit) > 0.9
+                                                                    ? "bg-red-500"
+                                                                    : (org.apiUsage.used / org.apiUsage.limit) > 0.7
+                                                                        ? "bg-yellow-500"
+                                                                        : "bg-blue-500"
+                                                                }`}
+                                                            style={{
+                                                                width: `${Math.min(
+                                                                    ((org.apiUsage.used || 0) / (org.apiUsage.limit || 1)) * 100,
+                                                                    100
+                                                                )}%`,
+                                                            }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex items-center gap-2 pt-4 border-t border-gray-100">

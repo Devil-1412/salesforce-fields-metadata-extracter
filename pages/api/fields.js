@@ -7,17 +7,16 @@ export default async function handler(req, res) {
 
   const { accessToken, instanceUrl, objects } = req.body;
 
-  if (!accessToken || !instanceUrl || !objects || !Array.isArray(objects)) {
+  if (!accessToken || !instanceUrl || !objects && objects.length === 0) {
     return res.status(400).json({ error: "Missing or invalid parameters" });
   }
 
   try {
     const conn = new jsforce.Connection({ accessToken, instanceUrl });
     const result = {};
-
-    for (let obj of objects) {
-      const desc = await conn.sobject(obj).describe();
-      result[obj] = desc.fields.map((f) => ({
+    for (const object of objects) {
+      const desc = await conn.sobject(object).describe();
+      result[object] = desc.fields.map((f) => ({
         label: f.label,
         ApiName: f.name,
         type: f.type,
@@ -101,7 +100,6 @@ export default async function handler(req, res) {
         Formula: f.calculatedFormula,
       }));
     }
-
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     console.error(err);

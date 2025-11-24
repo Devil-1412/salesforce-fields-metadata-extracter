@@ -14,11 +14,11 @@ export default function RootLayout({ children }) {
         {/* Navbar is client-side */}
         <Navbar />
 
-        <main className="flex-grow w-full max-w-7xl mx-auto px-6 py-10">
+        <main className="flex-grow w-full max-w-[95%] mx-auto px-4 sm:px-6 py-6">
           {children}
         </main>
 
-        <footer className="relative mt-16 bg-gradient-to-br from-blue-800 via-indigo-800 to-blue-900 text-white rounded-t-3xl shadow-2xl">
+        <footer className="relative mt-8 bg-gradient-to-br from-blue-800 via-indigo-800 to-blue-900 text-white rounded-t-3xl shadow-2xl">
           {/* Decorative gradient glow */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.15),transparent_60%)]"></div>
 

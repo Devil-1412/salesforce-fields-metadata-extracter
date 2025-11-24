@@ -2,11 +2,10 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import { LayoutGrid, Columns } from "lucide-react";
+import SearchableDropdown from "../components/SearchableDropdown";
 
 export default function CompareFields() {
-  const [preselectedObjects, setPreselectedObjects] = useState([]);
-  const [orgSelectedObjects, setOrgSelectedObjects] = useState({});
-  const [orgSelectionDrafts, setOrgSelectionDrafts] = useState({});
+  // Removed orgSelectedObjects and orgSelectionDrafts
   const [comparisons, setComparisons] = useState([]);
   const [activeComparisonId, setActiveComparisonId] = useState("");
   const [orgObjectsMap, setOrgObjectsMap] = useState({});
@@ -34,15 +33,29 @@ export default function CompareFields() {
   const orgObjectsToLoad = useMemo(() => {
     const map = {};
     validOrgs.forEach((org) => {
-      const selections = orgSelectedObjects[org.instanceUrl] || [];
-      map[org.instanceUrl] = Array.from(new Set(selections));
+      map[org.instanceUrl] = new Set();
     });
-    return map;
-  }, [validOrgs, orgSelectedObjects]);
-  const hasAnySelection = useMemo(
-    () => Object.values(orgSelectedObjects).some((items) => items.length > 0),
-    [orgSelectedObjects]
-  );
+
+    comparisons.forEach((cmp) => {
+      if (cmp.sourceOrg && cmp.sourceObject) {
+        if (!map[cmp.sourceOrg]) map[cmp.sourceOrg] = new Set();
+        map[cmp.sourceOrg].add(cmp.sourceObject);
+      }
+      (cmp.targets || []).forEach((t) => {
+        if (t.orgKey && t.objectName) {
+          if (!map[t.orgKey]) map[t.orgKey] = new Set();
+          map[t.orgKey].add(t.objectName);
+        }
+      });
+    });
+
+    // Convert Sets to Arrays
+    const result = {};
+    Object.keys(map).forEach((key) => {
+      result[key] = Array.from(map[key]);
+    });
+    return result;
+  }, [validOrgs, comparisons]);
 
   // Ensure there is always at least one comparison and active selection
   useEffect(() => {
@@ -68,7 +81,6 @@ export default function CompareFields() {
   useEffect(() => {
     if (validOrgs.length === 0) {
       setOrgObjectsMap({});
-      setOrgSelectedObjects({});
       return;
     }
 
@@ -118,55 +130,9 @@ export default function CompareFields() {
     };
   }, [validOrgs]);
 
-  // Ensure each org maintains a selection list (at least one object when available)
-  useEffect(() => {
-    if (!validOrgs.length) {
-      setOrgSelectedObjects({});
-      return;
-    }
-    setOrgSelectedObjects((prev) => {
-      let changed = false;
-      const updated = {};
 
-      validOrgs.forEach((org, orgIndex) => {
-        const key = org.instanceUrl;
-        const options = orgObjectsMap[key] || [];
-        if (!options.length) {
-          if (prev[key] && prev[key].length) {
-            changed = true;
-          }
-          updated[key] = [];
-          return;
-        }
 
-        const prevList = (prev[key] || []).filter((obj) =>
-          options.some((opt) => opt.name === obj)
-        );
-
-        if (!prevList.length) {
-          const preferred = preselectedObjects.find((obj) =>
-            options.some((opt) => opt.name === obj)
-          );
-          const fallback =
-            preferred || options[orgIndex]?.name || options[0]?.name || "";
-          updated[key] = fallback ? [fallback] : [];
-          changed = true;
-        } else {
-          updated[key] = prevList;
-          if (!prev[key] || prev[key].length !== prevList.length) {
-            changed = true;
-          }
-        }
-      });
-
-      if (!changed) {
-        return prev;
-      }
-      return updated;
-    });
-  }, [validOrgs, orgObjectsMap, preselectedObjects]);
-
-  // Keep comparisons aligned with available orgs/objects
+  // Keep comparisons aligned with available orgs
   useEffect(() => {
     if (!comparisons.length) return;
 
@@ -187,18 +153,22 @@ export default function CompareFields() {
         if (!nextComparison.sourceOrg || !validOrgKeys.has(nextComparison.sourceOrg)) {
           nextComparison.sourceOrg = validOrgs[0]?.instanceUrl || "";
           nextComparison.sourceObject = "";
+          changed = true;
         }
 
-        const sourceOptions = orgSelectedObjects[nextComparison.sourceOrg] || [];
-        if (
-          nextComparison.sourceObject &&
-          !sourceOptions.includes(nextComparison.sourceObject)
-        ) {
-          nextComparison.sourceObject = "";
+        // Check if source object is valid in the new org list is tricky without selected objects state
+        // We rely on the user to select valid objects from the dropdown. 
+        // If the org changes, we might want to clear the object if it doesn't exist, 
+        // but checking existence requires looking at orgObjectsMap.
+        const sourceOptions = orgObjectsMap[nextComparison.sourceOrg] || [];
+        if (nextComparison.sourceObject && sourceOptions.length > 0) {
+          const exists = sourceOptions.some(o => o.name === nextComparison.sourceObject);
+          if (!exists) {
+            nextComparison.sourceObject = "";
+            changed = true;
+          }
         }
-        if (!nextComparison.sourceObject && sourceOptions.length) {
-          nextComparison.sourceObject = sourceOptions[0];
-        }
+
 
         const filteredTargets = (nextComparison.targets || []).filter(
           (target) =>
@@ -208,14 +178,16 @@ export default function CompareFields() {
         );
 
         const normalizedTargets = filteredTargets.map((target) => {
-          const targetOptions = orgSelectedObjects[target.orgKey] || [];
+          const targetOptions = orgObjectsMap[target.orgKey] || [];
           let objectName = target.objectName;
-          if (objectName && !targetOptions.includes(objectName)) {
-            objectName = "";
+
+          if (objectName && targetOptions.length > 0) {
+            const exists = targetOptions.some(o => o.name === objectName);
+            if (!exists) {
+              objectName = "";
+            }
           }
-          if (!objectName && targetOptions.length) {
-            objectName = targetOptions[0];
-          }
+
           return {
             orgKey: target.orgKey,
             objectName,
@@ -226,6 +198,11 @@ export default function CompareFields() {
         if (normalizedTargets.length !== filteredTargets.length) {
           changed = true;
         }
+        // Also check if any target object name changed (was cleared)
+        if (JSON.stringify(normalizedTargets) !== JSON.stringify(filteredTargets)) {
+          changed = true;
+        }
+
 
         nextComparison.targets = normalizedTargets;
 
@@ -250,7 +227,7 @@ export default function CompareFields() {
       if (!changed) return prev;
       return updated;
     });
-  }, [validOrgs, orgSelectedObjects]);
+  }, [validOrgs, orgObjectsMap]);
 
   // Load available orgs from API
   useEffect(() => {
@@ -278,16 +255,8 @@ export default function CompareFields() {
 
   // Load orgs and selected objects from sessionStorage (default to 2 orgs)
   useEffect(() => {
-    const objs = JSON.parse(sessionStorage.getItem("selectedObjects") || "[]");
-    const org1 = JSON.parse(sessionStorage.getItem("org1"));
-    const org2 = JSON.parse(sessionStorage.getItem("org2"));
-
-    setPreselectedObjects(objs);
-
     // Initialize with default 2 orgs if available
     const initialOrgs = [];
-    if (org1 && org1.accessToken) initialOrgs.push(org1);
-    if (org2 && org2.accessToken) initialOrgs.push(org2);
 
     // Ensure at least 2 orgs (add placeholder if needed)
     if (initialOrgs.length === 0) {
@@ -481,30 +450,7 @@ export default function CompareFields() {
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
   };
-  const handleOrgObjectAdd = (orgKey, value) => {
-    if (!value) return;
-    setOrgSelectedObjects((prev) => {
-      const existing = prev[orgKey] || [];
-      if (existing.includes(value)) return prev;
-      return {
-        ...prev,
-        [orgKey]: [...existing, value],
-      };
-    });
-    setOrgSelectionDrafts((prev) => ({ ...prev, [orgKey]: "" }));
-  };
 
-  const handleOrgObjectRemove = (orgKey, value) => {
-    setOrgSelectedObjects((prev) => {
-      const existing = prev[orgKey] || [];
-      if (!existing.includes(value)) return prev;
-      const filtered = existing.filter((item) => item !== value);
-      return {
-        ...prev,
-        [orgKey]: filtered,
-      };
-    });
-  };
 
   const handleComparisonChange = (comparisonId, updater) => {
     setComparisons((prev) =>
@@ -527,7 +473,7 @@ export default function CompareFields() {
       id: `cmp-${Date.now()}`,
       name: `Comparison ${comparisons.length + 1 || 1}`,
       sourceOrg: validOrgs[0]?.instanceUrl || "",
-      sourceObject: orgSelectedObjects[validOrgs[0]?.instanceUrl]?.[0] || "",
+      sourceObject: "",
       targets: [],
     };
     setComparisons((prev) => {
@@ -564,10 +510,9 @@ export default function CompareFields() {
         return comparison;
       }
       const nextOrgKey = availableTargets[0].instanceUrl;
-      const nextObjects = orgSelectedObjects[nextOrgKey] || [];
       const target = {
         orgKey: nextOrgKey,
-        objectName: nextObjects[0] || "",
+        objectName: "",
       };
       return {
         ...comparison,
@@ -587,8 +532,7 @@ export default function CompareFields() {
   const handleComparisonSourceOrgChange = (comparisonId, orgKey) => {
     handleComparisonChange(comparisonId, (comparison) => {
       if (comparison.sourceOrg === orgKey) return comparison;
-      const options = orgSelectedObjects[orgKey] || [];
-      const nextSource = options[0] || "";
+      const nextSource = "";
       const filteredTargets = (comparison.targets || []).filter(
         (target) => target.orgKey !== orgKey
       );
@@ -608,10 +552,9 @@ export default function CompareFields() {
   const handleComparisonTargetOrgChange = (comparisonId, targetIndex, orgKey) => {
     handleComparisonChange(comparisonId, (comparison) => {
       const targets = [...(comparison.targets || [])];
-      const options = orgSelectedObjects[orgKey] || [];
       targets[targetIndex] = {
         orgKey,
-        objectName: options[0] || "",
+        objectName: "",
       };
       return { ...comparison, targets };
     });
@@ -884,560 +827,457 @@ export default function CompareFields() {
           </div>
         </section>
 
-        {loading ? (
-          <div className="text-center text-gray-600 mt-10">Loading field data...</div>
-        ) : (
-          <>
-            <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8">
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-lg font-semibold text-gray-700">Object Selection</h3>
-                  <p className="text-sm text-gray-500">
-                    Choose the objects for each org that you want to include in comparisons. These selected objects
-                    become the building blocks for the comparison rules defined below.
-                  </p>
-                </div>
-                {validOrgs.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {validOrgs.map((org, index) => {
-                      const key = org.instanceUrl;
-                      const label = org.orgName !== "None" ? org.orgName : `Org ${index + 1}`;
-                      const optionsList = orgObjectsMap[key] || [];
-                      const selections = orgSelectedObjects[key] || [];
-                      const isLoadingOptions = orgObjectsMap[key] === undefined;
-                      return (
-                        <div key={key} className="flex flex-col gap-3 p-4 border border-gray-200 rounded-lg shadow-sm bg-white">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-semibold text-gray-700">{label}</span>
-                            <span className="text-xs text-gray-500 truncate">
-                              {org.instanceUrl ? org.instanceUrl.replace("https://", "") : "Not connected"}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-2 min-h-[38px]">
-                            {selections.length === 0 ? (
-                              <span className="text-xs text-gray-500">No objects selected yet.</span>
-                            ) : (
-                              selections.map((obj) => (
-                                <span
-                                  key={obj}
-                                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700"
-                                >
-                                  {obj}
-                                  <button
-                                    onClick={() => handleOrgObjectRemove(key, obj)}
-                                    className="text-gray-500 hover:text-red-500"
-                                    title="Remove object"
-                                  >
-                                    ✕
-                                  </button>
-                                </span>
-                              ))
-                            )}
-                          </div>
-                          <select
-                            value={orgSelectionDrafts[key] || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (!value) return;
-                              handleOrgObjectAdd(key, value);
-                            }}
-                            disabled={isLoadingOptions || optionsList.length === 0}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
-                          >
-                            <option value="">
-                              {isLoadingOptions
-                                ? "Loading objects..."
-                                : optionsList.length === 0
-                                  ? "No objects available"
-                                  : "Add object to compare"}
+        {/* Object Selection Container: only show if 2 orgs are selected */}
+
+
+        {/* Comparison Container */}
+        {validOrgs.length >= 2 && (
+          <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 space-y-6">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-lg font-semibold text-gray-700">Comparison Logic</h3>
+              <p className="text-sm text-gray-500">
+                Map a single source object to one or more destination objects. One-to-many comparisons are supported,
+                but many-to-many mappings are not.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={addComparison}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                + Add Comparison
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {comparisons.map((comparison, idx) => {
+                const sourceOptions = orgObjectsMap[comparison.sourceOrg] || [];
+                const availableTargetOrgs = validOrgs.filter(
+                  (org) => org.instanceUrl !== comparison.sourceOrg
+                );
+                return (
+                  <div key={comparison.id} className="border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div className="flex flex-col gap-1 flex-1">
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Comparison Name
+                        </label>
+                        <input
+                          type="text"
+                          value={comparison.name || ""}
+                          onChange={(e) => handleComparisonNameChange(comparison.id, e.target.value)}
+                          className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          placeholder={`Comparison ${idx + 1}`}
+                        />
+                      </div>
+                      {comparisons.length > 1 && (
+                        <button
+                          onClick={() => removeComparison(comparison.id)}
+                          className="text-red-600 text-sm font-medium hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Source Object</p>
+                        <select
+                          value={comparison.sourceOrg}
+                          onChange={(e) => handleComparisonSourceOrgChange(comparison.id, e.target.value)}
+                          className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                        >
+                          {validOrgs.map((org) => (
+                            <option key={org.instanceUrl} value={org.instanceUrl}>
+                              {org.orgName !== "None" ? org.orgName : org.instanceUrl.replace("https://", "")}
                             </option>
-                            {optionsList.map((obj) => (
-                              <option key={obj.name} value={obj.name}>
-                                {obj.label ? `${obj.label} (${obj.name})` : obj.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    Connect at least one org to start selecting objects.
-                  </p>
-                )}
-                {validOrgs.length > 0 && !hasAnySelection && (
-                  <p className="text-xs text-gray-500">
-                    Choose at least one object per org to enable comparison mapping.
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 space-y-6">
-              <div className="flex flex-col gap-1">
-                <h3 className="text-lg font-semibold text-gray-700">Comparison Logic</h3>
-                <p className="text-sm text-gray-500">
-                  Map a single source object to one or more destination objects. One-to-many comparisons are supported,
-                  but many-to-many mappings are not.
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={addComparison}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                >
-                  + Add Comparison
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {comparisons.map((comparison, idx) => {
-                  const sourceOptions = orgSelectedObjects[comparison.sourceOrg] || [];
-                  const availableTargetOrgs = validOrgs.filter(
-                    (org) => org.instanceUrl !== comparison.sourceOrg
-                  );
-                  return (
-                    <div key={comparison.id} className="border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
-                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div className="flex flex-col gap-1 flex-1">
-                          <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                            Comparison Name
-                          </label>
-                          <input
-                            type="text"
-                            value={comparison.name || ""}
-                            onChange={(e) => handleComparisonNameChange(comparison.id, e.target.value)}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                            placeholder={`Comparison ${idx + 1}`}
-                          />
-                        </div>
-                        {comparisons.length > 1 && (
-                          <button
-                            onClick={() => removeComparison(comparison.id)}
-                            className="text-red-600 text-sm font-medium hover:text-red-700"
-                          >
-                            Remove
-                          </button>
-                        )}
+                          ))}
+                        </select>
+                        <SearchableDropdown
+                          label=""
+                          options={sourceOptions.map((o) => ({ label: `${o.label} (${o.name})`, value: o.name }))}
+                          value={comparison.sourceObject || ""}
+                          onChange={(val) => handleComparisonSourceObjectChange(comparison.id, val)}
+                          placeholder={sourceOptions.length ? "Select Source Object" : "No objects available"}
+                          disabled={!sourceOptions.length}
+                        />
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
-                          <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Source Object</p>
-                          <select
-                            value={comparison.sourceOrg}
-                            onChange={(e) => handleComparisonSourceOrgChange(comparison.id, e.target.value)}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                      <div className="flex flex-col gap-3 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Target Objects</p>
+                          <button
+                            onClick={() => addComparisonTarget(comparison.id)}
+                            className="text-xs font-semibold text-purple-600 hover:text-purple-800"
+                            disabled={!availableTargetOrgs.length}
                           >
-                            {validOrgs.map((org) => (
-                              <option key={org.instanceUrl} value={org.instanceUrl}>
-                                {org.orgName !== "None" ? org.orgName : org.instanceUrl.replace("https://", "")}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            value={comparison.sourceObject || ""}
-                            onChange={(e) => handleComparisonSourceObjectChange(comparison.id, e.target.value)}
-                            disabled={!sourceOptions.length}
-                            className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
-                          >
-                            {sourceOptions.length === 0 ? (
-                              <option value="">No objects available</option>
-                            ) : (
-                              sourceOptions.map((obj) => (
-                                <option key={obj} value={obj}>
-                                  {obj}
-                                </option>
-                              ))
-                            )}
-                          </select>
+                            + Add Target
+                          </button>
                         </div>
-
-                        <div className="flex flex-col gap-3 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Target Objects</p>
-                            <button
-                              onClick={() => addComparisonTarget(comparison.id)}
-                              className="text-xs font-semibold text-purple-600 hover:text-purple-800"
-                              disabled={!availableTargetOrgs.length}
-                            >
-                              + Add Target
-                            </button>
-                          </div>
-                          {(comparison.targets || []).length === 0 ? (
-                            <p className="text-xs text-gray-500">
-                              Map the source object to one or more targets (one-to-many supported).
-                            </p>
-                          ) : (
-                            (comparison.targets || []).map((target, targetIdx) => {
-                              const targetOptions = orgSelectedObjects[target.orgKey] || [];
-                              return (
-                                <div
-                                  key={`${comparison.id}-target-${targetIdx}`}
-                                  className="rounded-xl bg-white border border-gray-200 p-3 space-y-2 shadow-inner"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <select
-                                      value={target.orgKey}
-                                      onChange={(e) =>
-                                        handleComparisonTargetOrgChange(comparison.id, targetIdx, e.target.value)
-                                      }
-                                      className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
-                                    >
-                                      {availableTargetOrgs.map((org) => (
-                                        <option key={org.instanceUrl} value={org.instanceUrl}>
-                                          {org.orgName !== "None"
-                                            ? org.orgName
-                                            : org.instanceUrl.replace("https://", "")}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <button
-                                      onClick={() => removeComparisonTarget(comparison.id, targetIdx)}
-                                      className="text-xs text-red-500 hover:text-red-700"
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
+                        {(comparison.targets || []).length === 0 ? (
+                          <p className="text-xs text-gray-500">
+                            Map the source object to one or more targets (one-to-many supported).
+                          </p>
+                        ) : (
+                          (comparison.targets || []).map((target, targetIdx) => {
+                            const targetOptions = orgObjectsMap[target.orgKey] || [];
+                            return (
+                              <div
+                                key={`${comparison.id}-target-${targetIdx}`}
+                                className="rounded-xl bg-white border border-gray-200 p-3 space-y-2 shadow-inner"
+                              >
+                                <div className="flex items-center justify-between gap-2">
                                   <select
-                                    value={target.objectName || ""}
+                                    value={target.orgKey}
                                     onChange={(e) =>
-                                      handleComparisonTargetObjectChange(comparison.id, targetIdx, e.target.value)
+                                      handleComparisonTargetOrgChange(comparison.id, targetIdx, e.target.value)
                                     }
-                                    disabled={!targetOptions.length}
-                                    className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-xs disabled:bg-gray-100 disabled:text-gray-400"
+                                    className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
                                   >
-                                    {targetOptions.length === 0 ? (
-                                      <option value="">No objects available</option>
-                                    ) : (
-                                      targetOptions.map((obj) => (
-                                        <option key={obj} value={obj}>
-                                          {obj}
-                                        </option>
-                                      ))
-                                    )}
+                                    {availableTargetOrgs.map((org) => (
+                                      <option key={org.instanceUrl} value={org.instanceUrl}>
+                                        {org.orgName !== "None"
+                                          ? org.orgName
+                                          : org.instanceUrl.replace("https://", "")}
+                                      </option>
+                                    ))}
                                   </select>
+                                  <button
+                                    onClick={() => removeComparisonTarget(comparison.id, targetIdx)}
+                                    className="text-xs text-red-500 hover:text-red-700"
+                                  >
+                                    Remove
+                                  </button>
                                 </div>
-                              );
-                            })
-                          )}
-                        </div>
+                                <SearchableDropdown
+                                  label=""
+                                  options={targetOptions.map((o) => ({ label: `${o.label} (${o.name})`, value: o.name }))}
+                                  value={target.objectName || ""}
+                                  onChange={(val) =>
+                                    handleComparisonTargetObjectChange(comparison.id, targetIdx, val)
+                                  }
+                                  placeholder={targetOptions.length ? "Select Target Object" : "No objects available"}
+                                  disabled={!targetOptions.length}
+                                />
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    View Comparison
-                  </span>
-                  <select
-                    value={activeComparisonId}
-                    onChange={(e) => setActiveComparisonId(e.target.value)}
-                    className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                  >
-                    {comparisons.map((cmp, idx) => (
-                      <option key={cmp.id} value={cmp.id}>
-                        {cmp.name || `Comparison ${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {activeParticipants.map((participant, idx) => (
-                    <span
-                      key={`${participant.orgKey}-${idx}`}
-                      className={`inline-flex flex-col rounded-xl border px-3 py-2 text-[11px] shadow-sm ${participant.role === "source"
-                        ? "border-blue-200 bg-blue-50 text-blue-700"
-                        : "border-purple-200 bg-purple-50 text-purple-700"
-                        }`}
-                    >
-                      <span className="font-semibold">{participant.orgLabel}</span>
-                      <span className="text-gray-600">{participant.objectName || "No object selected"}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 shadow-sm text-center">
-                  <p className="text-blue-700 text-xs font-medium uppercase">Total Fields</p>
-                  <p className="text-2xl font-bold text-blue-800">{totalCount}</p>
-                </div>
-                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 shadow-sm text-center">
-                  <p className="text-green-700 text-xs font-medium uppercase">Matching</p>
-                  <p className="text-2xl font-bold text-green-800">{matchingCount}</p>
-                </div>
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 shadow-sm text-center">
-                  <p className="text-red-700 text-xs font-medium uppercase">Different</p>
-                  <p className="text-2xl font-bold text-red-800">{differentCount}</p>
-                </div>
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 shadow-sm text-center">
-                  <p className="text-yellow-700 text-xs font-medium uppercase">Difference %</p>
-                  <p className="text-2xl font-bold text-yellow-800">{diffPercent}%</p>
-                </div>
-              </div>
-            </section>
-
-            {/* Metadata Dropdown */}
-            <div className="flex flex-wrap justify-between items-center gap-6 mb-4">
-              {/* Metadata selection dropdown */}
-              <div className="relative">
-                <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-64 shadow-sm">
-                  <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
-                    Compare By ({selectedMetadata.length})
-                  </summary>
-                  <div className="absolute z-30 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2 left-0">
-                    {metadataOptions.map((key) => (
-                      <label
-                        key={key}
-                        className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedMetadata.includes(key)}
-                          onChange={() => toggleMetadata(key)}
-                          className="mr-2 accent-blue-600"
-                        />
-                        {key}
-                      </label>
-                    ))}
                   </div>
-                </details>
-              </div>
-              {/* Type filter dropdown
-            <div className="relative">
-              <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-64 shadow-sm">
-                <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
-                  Filter by Field Type
-                  <span className="text-gray-400 text-sm">
-                    ({typeFilter.length || "All"})
-                  </span>
-                </summary>
-                <div className="absolute z-20 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2">
-                  {allTypes.map((t) => (
-                    <label
-                      key={t}
-                      className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={typeFilter.includes(t)}
-                        onChange={() => toggleSelection(t, setTypeFilter)}
-                        className="mr-2 accent-blue-600"
-                      />
-                      {t}
-                    </label>
-                  ))}
-                </div>
-              </details>
-            </div> */}
+                );
+              })}
             </div>
 
-
-            {/* Filter Buttons and Display Toggle */}
-            <div className="flex justify-center items-center gap-4 mb-6">
-              <div className="inline-flex bg-white border border-gray-300 rounded-xl shadow-sm overflow-hidden">
-                {[
-                  { key: "all", label: "All Fields" },
-                  { key: "different", label: "Only Different" },
-                  { key: "same", label: "Only Matching" },
-                ].map(({ key, label }) => {
-                  const isActive = filter === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setFilter(key)}
-                      className={`px-5 py-2 text-sm font-medium transition-all duration-200 ${isActive
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
-                        : "text-gray-600 hover:bg-gray-50"
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mt-8 mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl shadow-lg">
+              <div className="flex flex-col gap-1">
+                <span className="text-lg font-bold uppercase tracking-wide text-blue-700">View Comparison</span>
+                <select
+                  value={activeComparisonId}
+                  onChange={(e) => setActiveComparisonId(e.target.value)}
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  style={{ minWidth: 220 }}
+                >
+                  {comparisons.map((cmp, idx) => (
+                    <option key={cmp.id} value={cmp.id}>
+                      {cmp.name || `Comparison ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
               </div>
-              {/* Display Mode Toggle */}
-              <button
-                onClick={() => setDisplayMode(displayMode === "default" ? "separate" : "default")}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-xl shadow-sm hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium text-gray-700"
-                title={displayMode === "default" ? "Switch to separate tables view" : "Switch to side-by-side view"}
-              >
-                {displayMode === "default" ? (
-                  <>
-                    <Columns className="w-4 h-4" />
-                    <span>Separate Tables</span>
-                  </>
-                ) : (
-                  <>
-                    <LayoutGrid className="w-4 h-4" />
-                    <span>Side-by-Side</span>
-                  </>
-                )}
-              </button>
-              {/* Scroll Lock Checkbox (only visible in separate tables mode) */}
-              {displayMode === "separate" && (
-                <label className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-xl shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+              <div className="flex flex-wrap gap-4 justify-end">
+                {activeParticipants.map((participant, idx) => (
+                  <span
+                    key={`${participant.orgKey}-${idx}`}
+                    className={`inline-flex flex-col rounded-xl border-2 px-4 py-3 text-base shadow-md ${participant.role === "source"
+                      ? "border-blue-400 bg-blue-100 text-blue-800"
+                      : "border-purple-400 bg-purple-100 text-purple-800"
+                      }`}
+                  >
+                    <span className="font-bold">{participant.orgLabel}</span>
+                    <span className="text-gray-700 text-sm">{participant.objectName || "No object selected"}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                <p className="text-blue-700 text-xs font-medium uppercase">Total Fields</p>
+                <p className="text-2xl font-bold text-blue-800">{totalCount}</p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                <p className="text-green-700 text-xs font-medium uppercase">Matching</p>
+                <p className="text-2xl font-bold text-green-800">{matchingCount}</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                <p className="text-red-700 text-xs font-medium uppercase">Different</p>
+                <p className="text-2xl font-bold text-red-800">{differentCount}</p>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-2 shadow-sm text-center">
+                <p className="text-yellow-700 text-xs font-medium uppercase">Difference %</p>
+                <p className="text-2xl font-bold text-yellow-800">{diffPercent}%</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Metadata Dropdown */}
+        <div className="flex flex-wrap justify-between items-center gap-6 mb-4">
+          {/* Metadata selection dropdown */}
+          <div className="relative">
+            <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-64 shadow-sm">
+              <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
+                Compare By ({selectedMetadata.length})
+              </summary>
+              <div className="absolute z-30 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2 left-0">
+                {metadataOptions.map((key) => (
+                  <label
+                    key={key}
+                    className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMetadata.includes(key)}
+                      onChange={() => toggleMetadata(key)}
+                      className="mr-2 accent-blue-600"
+                    />
+                    {key}
+                  </label>
+                ))}
+              </div>
+            </details>
+          </div>
+          {/* Type filter dropdown
+        <div className="relative">
+          <details className="group border border-gray-300 rounded-lg px-4 py-2 bg-white cursor-pointer w-64 shadow-sm">
+            <summary className="flex justify-between items-center text-gray-700 font-medium select-none">
+              Filter by Field Type
+              <span className="text-gray-400 text-sm">
+                ({typeFilter.length || "All"})
+              </span>
+            </summary>
+            <div className="absolute z-20 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-auto w-full p-2">
+              {allTypes.map((t) => (
+                <label
+                  key={t}
+                  className="flex items-center text-gray-700 px-2 py-1 hover:bg-gray-50 rounded cursor-pointer"
+                >
                   <input
                     type="checkbox"
-                    checked={scrollLock}
-                    onChange={(e) => setScrollLock(e.target.checked)}
-                    className="w-4 h-4 accent-blue-600 cursor-pointer"
+                    checked={typeFilter.includes(t)}
+                    onChange={() => toggleSelection(t, setTypeFilter)}
+                    className="mr-2 accent-blue-600"
                   />
-                  <span className="text-sm font-medium text-gray-700">Scroll Lock</span>
+                  {t}
                 </label>
-              )}
+              ))}
             </div>
+          </details>
+        </div> */}
+        </div>
 
-            {/* Table */}
-            {hasActiveData ? (
-              displayMode === "default" ? (
-                // Default Side-by-Side View
-                <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
-                  <table className="min-w-full text-sm border-collapse">
-                    <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
-                      <tr>
-                        {selectedMetadata.map((key) => (
-                          <th
-                            key={key}
-                            colSpan={activeParticipants.length || 1}
-                            className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700"
-                          >
-                            {key}
-                          </th>
-                        ))}
-                      </tr>
-                      <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
-                        {selectedMetadata.map((key) =>
-                          (activeParticipants.length ? activeParticipants : [{ orgLabel: "Org", objectName: "—" }]).map(
-                            (participant, participantIdx) => (
-                              <th
-                                key={`${key}-participant-${participantIdx}`}
-                                className="p-3 text-center text-xs font-semibold border-b border-blue-400/30"
-                              >
-                                <div className="flex flex-col gap-1">
-                                  <span>{participant.orgLabel}</span>
-                                  <span className="text-[10px] font-normal text-blue-100">
-                                    {participant.objectName || "—"}
-                                  </span>
-                                </div>
-                              </th>
-                            )
-                          )
-                        )}
-                      </tr>
-                    </thead>
 
-                    <tbody className="border-t-1 border-gray-200">
-                      {filteredFields.map((f, idx) => (
-                        <tr
-                          key={idx}
-                          className={`transition-all duration-150 ${f.diff
-                            ? "bg-red-50/50 hover:bg-red-100/70 border-l-4 border-red-400"
-                            : "bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300"
-                            }`}
-                        >
-                          {selectedMetadata.map((key) =>
-                            activeParticipants.map((participant, participantIdx) => {
-                              const fieldData = f.fieldDataArray[participantIdx] || {};
-                              return (
-                                <td
-                                  key={`${key}-${participantIdx}`}
-                                  className="p-4 text-center text-gray-700 font-medium"
-                                >
-                                  <span className="inline-block px-2 py-1 rounded-md text-gray-800">
-                                    {String(fieldData[key] ?? "—")}
-                                  </span>
-                                </td>
-                              );
-                            })
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                // Separate Tables View
-                <div
-                  ref={scrollContainerRef}
-                  className="overflow-y-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide"
+        {/* Filter Buttons and Display Toggle */}
+        <div className="flex justify-center items-center gap-4 mb-6">
+          <div className="inline-flex bg-white border border-gray-300 rounded-xl shadow-sm overflow-hidden">
+            {[
+              { key: "all", label: "All Fields" },
+              { key: "different", label: "Only Different" },
+              { key: "same", label: "Only Matching" },
+            ].map(({ key, label }) => {
+              const isActive = filter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`px-5 py-2 text-sm font-medium transition-all duration-200 ${isActive
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
+                    : "text-gray-600 hover:bg-gray-50"
+                    }`}
                 >
-                  <div className="flex gap-6 p-6">
-                    {activeParticipants.map((participant, orgIdx) => (
-                      <div key={`${participant.orgKey}-${orgIdx}`} className="flex-1 min-w-0 flex flex-col">
-                        <div className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg shadow-md">
-                          <h3 className="text-sm font-bold text-white uppercase tracking-wide">
-                            {participant.orgLabel}
-                          </h3>
-                          <p className="text-[11px] text-blue-100 font-medium truncate">
-                            {participant.objectName || "No object selected"}
-                          </p>
-                        </div>
-                        <div
-                          ref={(el) => {
-                            if (el) {
-                              tableScrollRefs.current[orgIdx] = el;
-                            }
-                          }}
-                          className="overflow-x-auto overflow-y-auto border-0 rounded-b-lg bg-white shadow-inner scrollbar-hide scrollbar-hover"
-                          style={{ maxHeight: 'calc(70vh - 100px)' }}
-                        >
-                          <table className="min-w-full text-sm border-collapse">
-                            <thead className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white sticky top-0 z-10 shadow-sm border-t-0">
-                              <tr>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Display Mode Toggle */}
+          <button
+            onClick={() => setDisplayMode(displayMode === "default" ? "separate" : "default")}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-xl shadow-sm hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium text-gray-700"
+            title={displayMode === "default" ? "Switch to separate tables view" : "Switch to side-by-side view"}
+          >
+            {displayMode === "default" ? (
+              <>
+                <Columns className="w-4 h-4" />
+                <span>Separate Tables</span>
+              </>
+            ) : (
+              <>
+                <LayoutGrid className="w-4 h-4" />
+                <span>Side-by-Side</span>
+              </>
+            )}
+          </button>
+          {/* Scroll Lock Checkbox (only visible in separate tables mode) */}
+          {displayMode === "separate" && (
+            <label className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-xl shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+              <input
+                type="checkbox"
+                checked={scrollLock}
+                onChange={(e) => setScrollLock(e.target.checked)}
+                className="w-4 h-4 accent-blue-600 cursor-pointer"
+              />
+              <span className="text-sm font-medium text-gray-700">Scroll Lock</span>
+            </label>
+          )}
+        </div>
+
+        {/* Table */}
+        {hasActiveData ? (
+          displayMode === "default" ? (
+            // Default Side-by-Side View
+            <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
+              <table className="min-w-full text-sm border-collapse">
+                <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
+                  <tr>
+                    {selectedMetadata.map((key) => (
+                      <th
+                        key={key}
+                        colSpan={activeParticipants.length || 1}
+                        className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700"
+                      >
+                        {key}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
+                    {selectedMetadata.map((key) =>
+                      (activeParticipants.length ? activeParticipants : [{ orgLabel: "Org", objectName: "—" }]).map(
+                        (participant, participantIdx) => (
+                          <th
+                            key={`${key}-participant-${participantIdx}`}
+                            className="p-3 text-center text-xs font-semibold border-b border-blue-400/30"
+                          >
+                            <div className="flex flex-col gap-1">
+                              <span>{participant.orgLabel}</span>
+                              <span className="text-[10px] font-normal text-blue-100">
+                                {participant.objectName || "—"}
+                              </span>
+                            </div>
+                          </th>
+                        )
+                      )
+                    )}
+                  </tr>
+                </thead>
+
+                <tbody className="border-t-1 border-gray-200">
+                  {filteredFields.map((f, idx) => (
+                    <tr
+                      key={idx}
+                      className={`transition-all duration-150 ${f.diff
+                        ? "bg-red-50/50 hover:bg-red-100/70 border-l-4 border-red-400"
+                        : "bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300"
+                        }`}
+                    >
+                      {selectedMetadata.map((key) =>
+                        activeParticipants.map((participant, participantIdx) => {
+                          const fieldData = f.fieldDataArray[participantIdx] || {};
+                          return (
+                            <td
+                              key={`${key}-${participantIdx}`}
+                              className="p-4 text-center text-gray-700 font-medium"
+                            >
+                              <span className="inline-block px-2 py-1 rounded-md text-gray-800">
+                                {String(fieldData[key] ?? "—")}
+                              </span>
+                            </td>
+                          );
+                        })
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            // Separate Tables View
+            <div
+              ref={scrollContainerRef}
+              className="overflow-y-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide"
+            >
+              <div className="flex gap-6 p-6">
+                {activeParticipants.map((participant, orgIdx) => (
+                  <div key={`${participant.orgKey}-${orgIdx}`} className="flex-1 min-w-0 flex flex-col">
+                    <div className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-t-lg shadow-md">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wide">
+                        {participant.orgLabel}
+                      </h3>
+                      <p className="text-[11px] text-blue-100 font-medium truncate">
+                        {participant.objectName || "No object selected"}
+                      </p>
+                    </div>
+                    <div
+                      ref={(el) => {
+                        if (el) {
+                          tableScrollRefs.current[orgIdx] = el;
+                        }
+                      }}
+                      className="overflow-x-auto overflow-y-auto border-0 rounded-b-lg bg-white shadow-inner scrollbar-hide scrollbar-hover"
+                      style={{ maxHeight: 'calc(70vh - 100px)' }}
+                    >
+                      <table className="min-w-full text-sm border-collapse">
+                        <thead className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white sticky top-0 z-10 shadow-sm border-t-0">
+                          <tr>
+                            {selectedMetadata.map((key) => (
+                              <th
+                                key={key}
+                                className="p-4 text-center font-bold text-xs uppercase tracking-wider whitespace-nowrap border-r border-blue-400/30 last:border-r-0"
+                              >
+                                {key}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredFields.map((f, idx) => {
+                            const fieldData = f.fieldDataArray[orgIdx] || {};
+                            return (
+                              <tr
+                                key={idx}
+                                className={`transition-all duration-150 ${f.diff
+                                  ? "bg-red-50/50 hover:bg-red-100/70 border-l-4 border-red-400"
+                                  : "bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300"
+                                  }`}
+                              >
                                 {selectedMetadata.map((key) => (
-                                  <th
+                                  <td
                                     key={key}
-                                    className="p-4 text-center font-bold text-xs uppercase tracking-wider whitespace-nowrap border-r border-blue-400/30 last:border-r-0"
+                                    className="p-4 text-center text-gray-700 font-medium whitespace-nowrap border-r border-gray-100 last:border-r-0"
                                   >
-                                    {key}
-                                  </th>
+                                    <span className="inline-block px-3 py-1.5 rounded-lg bg-gray-50 text-gray-800 font-medium">
+                                      {String(fieldData[key] ?? "—")}
+                                    </span>
+                                  </td>
                                 ))}
                               </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {filteredFields.map((f, idx) => {
-                                const fieldData = f.fieldDataArray[orgIdx] || {};
-                                return (
-                                  <tr
-                                    key={idx}
-                                    className={`transition-all duration-150 ${f.diff
-                                      ? "bg-red-50/50 hover:bg-red-100/70 border-l-4 border-red-400"
-                                      : "bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300"
-                                      }`}
-                                  >
-                                    {selectedMetadata.map((key) => (
-                                      <td
-                                        key={key}
-                                        className="p-4 text-center text-gray-700 font-medium whitespace-nowrap border-r border-gray-100 last:border-r-0"
-                                      >
-                                        <span className="inline-block px-3 py-1.5 rounded-lg bg-gray-50 text-gray-800 font-medium">
-                                          {String(fieldData[key] ?? "—")}
-                                        </span>
-                                      </td>
-                                    ))}
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ))}
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )
-            ) : (
-              <p className="text-center text-gray-600 mt-6">
-                Select a comparison with defined objects to view field data.
-              </p>
-            )}
-          </>
+                ))}
+              </div>
+            </div>
+          )
+        ) : (
+          <p className="text-center text-gray-600 mt-6">
+            Select a comparison with defined objects to view field data.
+          </p>
         )}
       </div>
     </>
