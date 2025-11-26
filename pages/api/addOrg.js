@@ -6,9 +6,9 @@ export default async function handler(req, res) {
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
     try {
-        const { email, orgEmail, orgPassword, securityToken, isSandbox } = req.body;
+        const { orgEmail, orgPassword, securityToken, isSandbox } = req.body;
 
-        if (!email || !orgEmail || !orgPassword || !securityToken) {
+        if (!orgEmail || !orgPassword || !securityToken) {
             return res
                 .status(400)
                 .json({ success: false, error: "Missing required fields" });
@@ -20,11 +20,23 @@ export default async function handler(req, res) {
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ success: false, error: "Missing authentication token" });
+        }
+
+        // Verify user token
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({ success: false, error: "Invalid token" });
+        }
+
         // Fetch user profile
         const { data: profile, error: userError } = await supabase
             .from("profiles")
             .select("id")
-            .eq("email", email)
+            .eq("id", user.id)
             .single();
 
         if (userError || !profile)

@@ -7,11 +7,16 @@ export default async function handler(req, res) {
     try {
         const { email, orgId } = req.body;
 
-        if (!email || !orgId) {
-            return res.status(400).json({ 
-                success: false, 
-                error: "Missing required fields: email and orgId" 
+        if (!orgId) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing required fields: orgId"
             });
+        }
+
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
         const supabase = createClient(
@@ -19,11 +24,18 @@ export default async function handler(req, res) {
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
+        // Verify user token
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({ success: false, error: "Invalid token" });
+        }
+
         // Fetch user profile
         const { data: profile, error: profileError } = await supabase
             .from("profiles")
             .select("id")
-            .eq("email", email)
+            .eq("id", user.id)
             .single();
 
         if (profileError || !profile) {
@@ -38,16 +50,16 @@ export default async function handler(req, res) {
             .single();
 
         if (orgError || !org) {
-            return res.status(404).json({ 
-                success: false, 
-                error: "Organization not found" 
+            return res.status(404).json({
+                success: false,
+                error: "Organization not found"
             });
         }
 
         if (org.user_id !== profile.id) {
-            return res.status(403).json({ 
-                success: false, 
-                error: "You don't have permission to delete this organization" 
+            return res.status(403).json({
+                success: false,
+                error: "You don't have permission to delete this organization"
             });
         }
 
@@ -60,9 +72,9 @@ export default async function handler(req, res) {
 
         if (deleteError) {
             console.error("Delete organization error:", deleteError.message);
-            return res.status(500).json({ 
-                success: false, 
-                error: "Failed to delete organization" 
+            return res.status(500).json({
+                success: false,
+                error: "Failed to delete organization"
             });
         }
 

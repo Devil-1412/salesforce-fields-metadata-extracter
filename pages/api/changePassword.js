@@ -5,13 +5,18 @@ export default async function handler(req, res) {
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
     try {
-        const { email, currentPassword, newPassword } = req.body;
+        const { currentPassword, newPassword } = req.body;
 
-        if (!email || !currentPassword || !newPassword) {
-            return res.status(400).json({ 
-                success: false, 
-                error: "Missing required fields: email, currentPassword, newPassword" 
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing required fields: currentPassword, newPassword"
             });
+        }
+
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
         // Validate new password strength
@@ -31,9 +36,16 @@ export default async function handler(req, res) {
             }
         );
 
+        // Verify user token
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({ success: false, error: "Invalid token" });
+        }
+
         // First, verify current password by attempting to sign in
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: email.trim().toLowerCase(),
+            email: user.email,
             password: currentPassword,
         });
 

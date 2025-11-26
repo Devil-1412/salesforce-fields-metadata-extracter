@@ -118,16 +118,18 @@ export default function MetadataPage() {
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
     try {
-      const email = sessionStorage.getItem("email");
-      if (!email) {
-        // If no email, maybe redirect to login or just show empty
-        // But let's try to load anyway or handle error
+      const token = localStorage.getItem("token");
+      if (!token) {
+        // If no token, maybe redirect to login or just show empty
         return;
       }
       const res = await fetch("/api/salesforceLogin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
@@ -171,7 +173,7 @@ export default function MetadataPage() {
   // Auto-select previously used org
   useEffect(() => {
     if (orgs.length > 0 && !selectedOrgId) {
-      const savedInstance = sessionStorage.getItem("instanceUrl");
+      const savedInstance = localStorage.getItem("instanceUrl");
       const initialOrg = orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
       if (initialOrg) {
         selectOrg(initialOrg.instanceUrl);
@@ -221,7 +223,7 @@ export default function MetadataPage() {
         const fieldsRes = await fetch("/api/fields", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: token, instanceUrl, object: [selectedObject] }),
+          body: JSON.stringify({ accessToken: token, instanceUrl, objects: [selectedObject] }),
         });
         const fieldsPayload = await fieldsRes.json();
         if (fieldsPayload.success) {
@@ -541,128 +543,65 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
         </div>
       </div>
 
-      {/* Table container */}
       <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
         <table className="min-w-full text-sm border-collapse">
-          <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
+          <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md h-fixed">
             <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
-              <th className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
-                #
-              </th>
-              {selectedMetadata.map((meta) => (
-                <th
-                  key={meta}
-                  className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700"
-                >
-                  {meta.replace(/([A-Z])/g, " $1")}
+              {selectedMetadata.map((key) => (
+                <th key={key} className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
+                  {key}
                 </th>
               ))}
             </tr>
           </thead>
-
-          <tbody className="divide-y divide-gray-100">
-            {filteredFields.map((f, i) => (
-              <tr
-                key={`${selectedObject}-${i}`}
-                className="bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300"
-              >
-                <td className="border border-gray-200 p-2 text-gray-600 text-center w-12">
-                  {i + 1}
-                </td>
-                {selectedMetadata.map((meta) => (
-                  <td key={meta} className="border border-gray-200 p-2 text-gray-700">
-                    {f[meta] === null
-                      ? "null"
-                      : Array.isArray(f[meta])
-                        ? f[meta].join("; ")
-                        : f[meta] !== undefined
-                          ? String(f[meta])
-                          : ""}
+          <tbody className="border-t-1 border-gray-200">
+            {filteredFields.map((field, idx) => (
+              <tr key={idx} className="bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300">
+                {selectedMetadata.map((key) => (
+                  <td key={key} className="p-4 text-center text-gray-700 font-medium">
+                    {field[key] !== undefined
+                      ? Array.isArray(field[key])
+                        ? field[key].join(", ")
+                        : String(field[key])
+                      : "—"}
                   </td>
                 ))}
               </tr>
             ))}
+            {filteredFields.length === 0 && (
+              <tr>
+                <td colSpan={selectedMetadata.length} className="p-4 text-center text-gray-700 font-medium">
+                  No fields found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
-
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-        {/* Multi-select dropdown */}
-        <div className="w-full max-w-md">
-          <SearchableDropdown
-            label="Select Objects for CSV Export"
-            options={objects.map((o) => ({ label: o.label, value: o.name }))}
-            value={exportObjects}
-            onChange={setExportObjects}
-            multiple={true}
-            placeholder="Select objects..."
-          />
-        </div>
-
-        {/* Export button */}
-        <button
-          onClick={() => exportSelectedToCSV(exportObjects)}
-          disabled={exportObjects.length === 0}
-          className={`px-6 py-2 rounded-lg font-semibold transition ${exportObjects.length === 0
-            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-            : "bg-blue-600 hover:bg-blue-700 text-white shadow-md"
-            }`}
-        >
-          Export CSV
-        </button>
-      </div>
-
     </div>
   );
 }
 
-
-function ValidationRulesTable({ data = [] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
-        No validation rules found.
-      </div>
-    );
-  }
-
-  // Dynamically get all unique keys from the data array
-  const allKeys = Array.from(
-    new Set(data.flatMap((item) => Object.keys(item)))
-  );
-
+export function ValidationRulesTable({ data }) {
+  if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Validation Rules found.</div>;
   return (
-    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
-      <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-green-100 sticky top-0 z-10">
+    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
+      <table className="min-w-full bg-white text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            {allKeys.map((key) => (
-              <th
-                key={key}
-                className="border p-2 text-left font-semibold text-gray-700 capitalize"
-              >
-                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
-              </th>
-            ))}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Active</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Error Message</th>
           </tr>
         </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr
-              key={row.Id || row.fullName || i}
-              className="hover:bg-green-50 transition border-b"
-            >
-              {allKeys.map((key) => (
-                <td key={key} className="border p-2 text-gray-700">
-                  {Array.isArray(row[key])
-                    ? row[key].join(", ")
-                    : typeof row[key] === "object" && row[key] !== null
-                      ? JSON.stringify(row[key])
-                      : row[key] !== undefined && row[key] !== null
-                        ? String(row[key])
-                        : "—"}
-                </td>
-              ))}
+        <tbody className="divide-y divide-gray-200">
+          {data.map((rule, idx) => (
+            <tr key={idx} className="hover:bg-gray-50">
+              <td className="px-6 py-4 font-medium text-gray-900">{rule.fullName}</td>
+              <td className="px-6 py-4 text-gray-700">{rule.active ? "✅" : "❌"}</td>
+              <td className="px-6 py-4 text-gray-700 max-w-xs truncate" title={rule.description}>{rule.description || "—"}</td>
+              <td className="px-6 py-4 text-red-600 max-w-xs truncate" title={rule.errorMessage}>{rule.errorMessage}</td>
             </tr>
           ))}
         </tbody>
@@ -671,53 +610,24 @@ function ValidationRulesTable({ data = [] }) {
   );
 }
 
-
-function TriggersTable({ data = [] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
-        No Triggers found.
-      </div>
-    );
-  }
-
-  // Dynamically get all unique keys from the data array
-  const allKeys = Array.from(
-    new Set(data.flatMap((item) => Object.keys(item)))
-  );
-
+export function TriggersTable({ data }) {
+  if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Triggers found.</div>;
   return (
-    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
-      <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-green-100 sticky top-0 z-10">
+    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
+      <table className="min-w-full bg-white text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            {allKeys.map((key) => (
-              <th
-                key={key}
-                className="border p-2 text-left font-semibold text-gray-700 capitalize"
-              >
-                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
-              </th>
-            ))}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usage</th>
           </tr>
         </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr
-              key={row.Id || row.fullName || i}
-              className="hover:bg-green-50 transition border-b"
-            >
-              {allKeys.map((key) => (
-                <td key={key} className="border p-2 text-gray-700">
-                  {Array.isArray(row[key])
-                    ? row[key].join(", ")
-                    : typeof row[key] === "object" && row[key] !== null
-                      ? JSON.stringify(row[key])
-                      : row[key] !== undefined && row[key] !== null
-                        ? String(row[key])
-                        : "—"}
-                </td>
-              ))}
+        <tbody className="divide-y divide-gray-200">
+          {data.map((trigger, idx) => (
+            <tr key={idx} className="hover:bg-gray-50">
+              <td className="px-6 py-4 font-medium text-gray-900">{trigger.Name}</td>
+              <td className="px-6 py-4 text-gray-700">{trigger.Status}</td>
+              <td className="px-6 py-4 text-gray-700">{trigger.UsageBeforeDelete ? "Before Delete " : ""}{trigger.UsageAfterInsert ? "After Insert" : ""}</td>
             </tr>
           ))}
         </tbody>
@@ -726,52 +636,24 @@ function TriggersTable({ data = [] }) {
   );
 }
 
-function ApexClassesTable({ data = [] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
-        No Appex Classes found.
-      </div>
-    );
-  }
-
-  // Dynamically get all unique keys from the data array
-  const allKeys = Array.from(
-    new Set(data.flatMap((item) => Object.keys(item)))
-  );
-
+export function ApexClassesTable({ data }) {
+  if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Apex Classes found.</div>;
   return (
-    <div className="overflow-auto max-h-[75vh] border rounded-xl p-4 shadow-sm bg-white">
-      <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-green-100 sticky top-0 z-10">
+    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
+      <table className="min-w-full bg-white text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            {allKeys.map((key) => (
-              <th
-                key={key}
-                className="border p-2 text-left font-semibold text-gray-700 capitalize"
-              >
-                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
-              </th>
-            ))}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">API Version</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
           </tr>
         </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr
-              key={row.Id || row.fullName || i}
-              className="hover:bg-green-50 transition border-b"
-            >
-              {allKeys.map((key) => (
-                <td key={key} className="border p-2 text-gray-700">
-                  {Array.isArray(row[key])
-                    ? row[key].join(", ")
-                    : typeof row[key] === "object" && row[key] !== null
-                      ? JSON.stringify(row[key])
-                      : row[key] !== undefined && row[key] !== null
-                        ? String(row[key])
-                        : "—"}
-                </td>
-              ))}
+        <tbody className="divide-y divide-gray-200">
+          {data.map((cls, idx) => (
+            <tr key={idx} className="hover:bg-gray-50">
+              <td className="px-6 py-4 font-medium text-gray-900">{cls.Name}</td>
+              <td className="px-6 py-4 text-gray-700">{cls.ApiVersion}</td>
+              <td className="px-6 py-4 text-gray-700">{cls.Status}</td>
             </tr>
           ))}
         </tbody>
@@ -780,52 +662,24 @@ function ApexClassesTable({ data = [] }) {
   );
 }
 
-function WorkflowsTable({ data = [] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="p-6 text-center text-gray-500 bg-gray-50 rounded-xl">
-        No Workflows found.
-      </div>
-    );
-  }
-
-  // Dynamically get all unique keys from the data array
-  const allKeys = Array.from(
-    new Set(data.flatMap((item) => Object.keys(item)))
-  );
-
+export function WorkflowsTable({ data }) {
+  if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Workflows found.</div>;
   return (
-    <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
-      <table className="min-w-full text-sm border-collapse">
-        <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md">
+    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
+      <table className="min-w-full bg-white text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            {allKeys.map((key) => (
-              <th
-                key={key}
-                className="border p-2 text-left font-semibold text-gray-700 capitalize"
-              >
-                {key.replace(/([A-Z])/g, " $1")} {/* add spacing for camelCase */}
-              </th>
-            ))}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trigger Type</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
           </tr>
         </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr
-              key={row.Id || row.fullName || i}
-              className="hover:bg-green-50 transition border-b"
-            >
-              {allKeys.map((key) => (
-                <td key={key} className="border p-2 text-gray-700">
-                  {Array.isArray(row[key])
-                    ? row[key].join(", ")
-                    : typeof row[key] === "object" && row[key] !== null
-                      ? JSON.stringify(row[key])
-                      : row[key] !== undefined && row[key] !== null
-                        ? String(row[key])
-                        : "—"}
-                </td>
-              ))}
+        <tbody className="divide-y divide-gray-200">
+          {data.map((wf, idx) => (
+            <tr key={idx} className="hover:bg-gray-50">
+              <td className="px-6 py-4 font-medium text-gray-900">{wf.fullName}</td>
+              <td className="px-6 py-4 text-gray-700">{wf.triggerType}</td>
+              <td className="px-6 py-4 text-gray-700">{wf.actions?.length || 0} Actions</td>
             </tr>
           ))}
         </tbody>

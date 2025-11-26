@@ -68,15 +68,17 @@ export default function ProfilePage() {
     });
 
     useEffect(() => {
-        const email = sessionStorage.getItem("email");
-        if (!email) return router.push("/login");
+        const token = localStorage.getItem("token");
+        if (!token) return router.push("/login");
 
         const fetchProfile = async () => {
             try {
                 const res = await fetch("/api/profile", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email }),
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -98,9 +100,11 @@ export default function ProfilePage() {
             try {
                 const res = await fetch("/api/userPreferences", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                     body: JSON.stringify({
-                        email: sessionStorage.getItem("email"),
                         action: "get"
                     }),
                 });
@@ -117,9 +121,11 @@ export default function ProfilePage() {
             try {
                 const res = await fetch("/api/securitySettings", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                     body: JSON.stringify({
-                        email: sessionStorage.getItem("email"),
                         action: "getSecuritySettings"
                     }),
                 });
@@ -140,9 +146,11 @@ export default function ProfilePage() {
             try {
                 const res = await fetch("/api/securitySettings", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                     body: JSON.stringify({
-                        email: sessionStorage.getItem("email"),
                         action: "getSessions"
                     }),
                 });
@@ -162,7 +170,7 @@ export default function ProfilePage() {
     }, [router]);
 
     const handleLogout = () => {
-        sessionStorage.clear();
+        localStorage.clear();
         router.push("/");
         window.location.reload();
     };
@@ -652,10 +660,10 @@ export default function ProfilePage() {
                                                     <div className="w-full bg-gray-200 rounded-full h-1.5">
                                                         <div
                                                             className={`h-1.5 rounded-full ${(org.apiUsage.used / org.apiUsage.limit) > 0.9
-                                                                    ? "bg-red-500"
-                                                                    : (org.apiUsage.used / org.apiUsage.limit) > 0.7
-                                                                        ? "bg-yellow-500"
-                                                                        : "bg-blue-500"
+                                                                ? "bg-red-500"
+                                                                : (org.apiUsage.used / org.apiUsage.limit) > 0.7
+                                                                    ? "bg-yellow-500"
+                                                                    : "bg-blue-500"
                                                                 }`}
                                                             style={{
                                                                 width: `${Math.min(

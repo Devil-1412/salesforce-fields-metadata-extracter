@@ -18,13 +18,16 @@ export default function ComparePage() {
   // Load available orgs from API
   useEffect(() => {
     const fetchOrgs = async () => {
-      const email = sessionStorage.getItem('email');
-      if (!email) return;
+      const token = localStorage.getItem('token');
+      if (!token) return;
       try {
         const res = await fetch("/api/salesforceLogin", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({}),
         });
         const data = await res.json();
         if (data.success) {
@@ -292,10 +295,10 @@ export default function ComparePage() {
               <table className="min-w-full text-sm border-collapse">
                 <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md h-fixed">
                   <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
-                    <th className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Object Name</th>
-                    <th className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Key Prefix</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Object Name</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Key Prefix</th>
                     {orgs.map((org, idx) => (
-                      <th key={idx} className="p-4 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
+                      <th key={idx} className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
                         {org.orgName !== "None" ? org.orgName : `Org ${idx + 1}`}
                       </th>
                     ))}

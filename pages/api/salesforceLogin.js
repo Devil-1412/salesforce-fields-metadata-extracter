@@ -7,9 +7,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, error: "Missing email" });
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ success: false, error: "Missing authentication token" });
     }
 
     // 🔹 Initialize Supabase client
@@ -18,15 +18,22 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 🔹 Fetch the user's organizations
+    // 🔹 Verify user token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return res.status(401).json({ success: false, error: "Invalid token" });
+    }
+
+    // 🔹 Fetch the user's profile using the user ID from the token
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id")
-      .eq("email", email)
+      .eq("id", user.id)
       .single();
 
     if (profileError || !profile) {
-      return res.status(404).json({ success: false, error: "User not found" });
+      return res.status(404).json({ success: false, error: "User profile not found" });
     }
 
     const { data: orgs, error: orgError } = await supabase

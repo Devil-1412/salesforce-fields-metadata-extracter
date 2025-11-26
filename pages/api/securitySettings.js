@@ -7,11 +7,16 @@ export default async function handler(req, res) {
     try {
         const { email, action, data } = req.body;
 
-        if (!email || !action) {
-            return res.status(400).json({ 
-                success: false, 
-                error: "Missing required fields: email and action" 
+        if (!action) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing required fields: action"
             });
+        }
+
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
         const supabase = createClient(
@@ -19,11 +24,18 @@ export default async function handler(req, res) {
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
+        // Verify user token
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({ success: false, error: "Invalid token" });
+        }
+
         // Fetch user profile
         const { data: profile, error: profileError } = await supabase
             .from("profiles")
             .select("id")
-            .eq("email", email)
+            .eq("id", user.id)
             .single();
 
         if (profileError || !profile) {
@@ -52,9 +64,9 @@ export default async function handler(req, res) {
 
                 if (securityError) {
                     console.error("Security settings error:", securityError.message);
-                    return res.status(500).json({ 
-                        success: false, 
-                        error: "Failed to update 2FA settings" 
+                    return res.status(500).json({
+                        success: false,
+                        error: "Failed to update 2FA settings"
                     });
                 }
 
@@ -88,9 +100,9 @@ export default async function handler(req, res) {
 
                 if (privacyError) {
                     console.error("Privacy settings error:", privacyError.message);
-                    return res.status(500).json({ 
-                        success: false, 
-                        error: "Failed to update privacy settings" 
+                    return res.status(500).json({
+                        success: false,
+                        error: "Failed to update privacy settings"
                     });
                 }
 
@@ -110,9 +122,9 @@ export default async function handler(req, res) {
 
                 if (sessionsError) {
                     console.error("Get sessions error:", sessionsError.message);
-                    return res.status(500).json({ 
-                        success: false, 
-                        error: "Failed to fetch sessions" 
+                    return res.status(500).json({
+                        success: false,
+                        error: "Failed to fetch sessions"
                     });
                 }
 
@@ -122,9 +134,9 @@ export default async function handler(req, res) {
             case "revokeSession":
                 // Revoke a specific session
                 if (!data?.sessionId) {
-                    return res.status(400).json({ 
-                        success: false, 
-                        error: "Missing sessionId" 
+                    return res.status(400).json({
+                        success: false,
+                        error: "Missing sessionId"
                     });
                 }
 
@@ -136,9 +148,9 @@ export default async function handler(req, res) {
 
                 if (revokeError) {
                     console.error("Revoke session error:", revokeError.message);
-                    return res.status(500).json({ 
-                        success: false, 
-                        error: "Failed to revoke session" 
+                    return res.status(500).json({
+                        success: false,
+                        error: "Failed to revoke session"
                     });
                 }
 
@@ -154,9 +166,9 @@ export default async function handler(req, res) {
 
                 if (revokeAllError) {
                     console.error("Revoke all sessions error:", revokeAllError.message);
-                    return res.status(500).json({ 
-                        success: false, 
-                        error: "Failed to revoke sessions" 
+                    return res.status(500).json({
+                        success: false,
+                        error: "Failed to revoke sessions"
                     });
                 }
 
@@ -173,9 +185,9 @@ export default async function handler(req, res) {
 
                 if (settingsError && settingsError.code !== "PGRST116") {
                     console.error("Get security settings error:", settingsError.message);
-                    return res.status(500).json({ 
-                        success: false, 
-                        error: "Failed to fetch security settings" 
+                    return res.status(500).json({
+                        success: false,
+                        error: "Failed to fetch security settings"
                     });
                 }
 
@@ -187,9 +199,9 @@ export default async function handler(req, res) {
                 break;
 
             default:
-                return res.status(400).json({ 
-                    success: false, 
-                    error: `Unknown action: ${action}` 
+                return res.status(400).json({
+                    success: false,
+                    error: `Unknown action: ${action}`
                 });
         }
 

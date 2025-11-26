@@ -39,12 +39,15 @@ export default function ObjectAnalysisPage() {
     setOrgLoading(true);
     setOrgError("");
     try {
-      const email = sessionStorage.getItem("email");
-      if (!email) throw new Error("Please sign in again to load your organizations.");
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("Please sign in again to load your organizations.");
       const res = await fetch("/api/salesforceLogin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!data.success || !Array.isArray(data.data)) {
@@ -74,8 +77,8 @@ export default function ObjectAnalysisPage() {
       setToken(org.accessToken);
       setInstanceUrl(org.instanceUrl);
       setCounts({});
-      sessionStorage.setItem("accessToken", org.accessToken);
-      sessionStorage.setItem("instanceUrl", org.instanceUrl);
+      localStorage.setItem("accessToken", org.accessToken);
+      localStorage.setItem("instanceUrl", org.instanceUrl);
       if (!silent) {
         toast.success(
           `Loaded ${org.orgName && org.orgName !== "None" ? org.orgName : "Salesforce organization"
@@ -88,7 +91,7 @@ export default function ObjectAnalysisPage() {
 
   useEffect(() => {
     if (!orgs.length) return;
-    const savedInstance = sessionStorage.getItem("instanceUrl");
+    const savedInstance = localStorage.getItem("instanceUrl");
     const initialOrg =
       orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
     selectOrg(initialOrg.instanceUrl, { silent: true });
@@ -365,39 +368,39 @@ export default function ObjectAnalysisPage() {
             </div>
           )}
 
-          <div className="mt-4 overflow-auto rounded-2xl border border-slate-200 max-h-[480px]">
+          <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
             {loading ? (
               <div className="flex h-60 items-center justify-center text-sm text-slate-500">
                 Loading objects…
               </div>
             ) : filteredObjects.length ? (
-              <table className="w-full min-w-[640px] divide-y divide-slate-100 text-left">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3">
+              <table className="min-w-full text-sm border-collapse">
+                <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md h-fixed">
+                  <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
                       #
                     </th>
-                    <th className="px-4 py-3">Label</th>
-                    <th className="px-4 py-3">API Name</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Created</th>
-                    <th className="px-4 py-3">Last Modified</th>
-                    <th className="px-4 py-3">ID Prefix</th>
-                    <th className="px-4 py-3 text-right">Records</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Label</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">API Name</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Type</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Created</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Last Modified</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">ID Prefix</th>
+                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700 text-right">Records</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-sm text-slate-600">
+                <tbody className="border-t-1 border-gray-200">
                   {filteredObjects.map((object, index) => (
                     <tr
                       key={object.name}
                       className={
-                        index % 2 === 0 ? "bg-white" : "bg-slate-50"
+                        index % 2 === 0 ? "bg-white border-l-4 border-transparent hover:border-blue-300" : "bg-slate-50 border-l-4 border-transparent hover:border-blue-300"
                       }
                     >
-                      <td className="px-4 py-3">
+                      <td className="p-4 text-center text-gray-700">
                         {index + 1}
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className="p-4 text-center text-gray-700 font-medium">
                         <button
                           onClick={() => handleObjectClick(object)}
                           className="hover:text-blue-600 hover:underline text-left"
@@ -405,11 +408,11 @@ export default function ObjectAnalysisPage() {
                           {object.label || object.name}
                         </button>
                       </td>
-                      <td className="px-4 py-3">{object.name}</td>
-                      <td className="px-4 py-3">
+                      <td className="p-4 text-center text-gray-700 font-medium">{object.name}</td>
+                      <td className="p-4 text-center text-gray-700 font-medium">
                         {object.custom ? "Custom" : "Standard"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="p-4 text-center text-gray-700 font-medium">
                         {object.createdDate ? (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-900">
@@ -420,10 +423,10 @@ export default function ObjectAnalysisPage() {
                             </span>
                           </div>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-700">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="p-4 text-center text-gray-700 font-medium">
                         {object.lastModifiedDate ? (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-900">
@@ -437,8 +440,8 @@ export default function ObjectAnalysisPage() {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">{object.keyPrefix || "—"}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="p-4 text-center text-gray-700 font-medium">{object.keyPrefix || "—"}</td>
+                      <td className="p-4 text-center text-gray-700 font-medium">
                         <button
                           onClick={() => fetchRecordCount(object.name)}
                           disabled={countLoadingFor === object.name}

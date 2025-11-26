@@ -27,9 +27,14 @@ export default function LoginPage() {
 
             if (data.success) {
                 toast.success("Logged in successfully!");
-                sessionStorage.setItem("email", email);
+                localStorage.setItem("token", data.session.access_token);
+                // localStorage.setItem("email", email); // Removed email storage
                 window.dispatchEvent(new Event("loggedIn"));
-                router.push("/");
+                if (data.hasOrganization) {
+                    router.push("/");
+                } else {
+                    router.push("/onboarding");
+                }
             } else {
                 toast.error(`${data.error || "Login failed. Please Try again."}`);
             }

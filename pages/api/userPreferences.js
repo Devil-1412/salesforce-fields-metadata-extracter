@@ -7,8 +7,9 @@ export default async function handler(req, res) {
     try {
         const { email, action, preferences } = req.body;
 
-        if (!email) {
-            return res.status(400).json({ success: false, error: "Missing email" });
+        const token = req.headers.authorization?.split(" ")[1];
+        if (!token) {
+            return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
         const supabase = createClient(
@@ -16,11 +17,18 @@ export default async function handler(req, res) {
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
+        // Verify user token
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({ success: false, error: "Invalid token" });
+        }
+
         // Fetch user profile
         const { data: profile, error: profileError } = await supabase
             .from("profiles")
             .select("id")
-            .eq("email", email)
+            .eq("id", user.id)
             .single();
 
         if (profileError || !profile) {
@@ -30,26 +38,26 @@ export default async function handler(req, res) {
         if (action === "update") {
             // Validate preferences
             if (!preferences) {
-                return res.status(400).json({ 
-                    success: false, 
-                    error: "Missing preferences data" 
+                return res.status(400).json({
+                    success: false,
+                    error: "Missing preferences data"
                 });
             }
 
             // Validate theme
             if (preferences.theme && !["light", "dark"].includes(preferences.theme)) {
-                return res.status(400).json({ 
-                    success: false, 
-                    error: "Invalid theme. Must be 'light' or 'dark'" 
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid theme. Must be 'light' or 'dark'"
                 });
             }
 
             // Validate language
             const validLanguages = ["en", "es", "fr", "de"];
             if (preferences.language && !validLanguages.includes(preferences.language)) {
-                return res.status(400).json({ 
-                    success: false, 
-                    error: `Invalid language. Must be one of: ${validLanguages.join(", ")}` 
+                return res.status(400).json({
+                    success: false,
+                    error: `Invalid language. Must be one of: ${validLanguages.join(", ")}`
                 });
             }
 
@@ -83,9 +91,9 @@ export default async function handler(req, res) {
 
             if (updateError) {
                 console.error("Update preferences error:", updateError.message);
-                return res.status(500).json({ 
-                    success: false, 
-                    error: "Failed to update preferences" 
+                return res.status(500).json({
+                    success: false,
+                    error: "Failed to update preferences"
                 });
             }
 
@@ -109,9 +117,9 @@ export default async function handler(req, res) {
 
             if (getError && getError.code !== "PGRST116") {
                 console.error("Get preferences error:", getError.message);
-                return res.status(500).json({ 
-                    success: false, 
-                    error: "Failed to fetch preferences" 
+                return res.status(500).json({
+                    success: false,
+                    error: "Failed to fetch preferences"
                 });
             }
 
@@ -133,9 +141,9 @@ export default async function handler(req, res) {
                 } : defaultPrefs,
             });
         } else {
-            return res.status(400).json({ 
-                success: false, 
-                error: `Unknown action: ${action}. Use 'update' or 'get'` 
+            return res.status(400).json({
+                success: false,
+                error: `Unknown action: ${action}. Use 'update' or 'get'`
             });
         }
     } catch (err) {

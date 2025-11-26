@@ -232,14 +232,17 @@ export default function CompareFields() {
   // Load available orgs from API
   useEffect(() => {
     const fetchOrgs = async () => {
-      const email = sessionStorage.getItem('email');
-      if (!email) return;
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
       try {
         const res = await fetch("/api/salesforceLogin", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({}),
         });
         const data = await res.json();
         if (data.success) {

@@ -4,33 +4,53 @@
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, X, LogOut, Settings, User, Sparkles, ChevronDown } from "lucide-react";
+import { Menu, X, LogOut, Settings, User, Sparkles, ChevronDown, Zap } from "lucide-react";
 import { Toaster } from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
 export default function Navbar() {
-    const nextPathname = usePathname();
-    const [pathname, setPathname] = useState(typeof window !== "undefined" ? window.location.pathname : "");
+    const router = useRouter();
+    const pathname = usePathname(); // Use usePathname hook directly
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [userEmail, setUserEmail] = useState("");
+    const [fullName, setFullName] = useState(""); // Add fullName state
     const [menuOpen, setMenuOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState(null);
     const menuRef = useRef(null);
     const profileRef = useRef(null);
-    // Dropdown show/hide with delay
-    const [showDropdown, setShowDropdown] = useState(false);
 
+    const fetchProfile = async () => {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        try {
+            const res = await fetch("/api/profile", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                },
+            });
+            const data = await res.json();
+            if (data.success) {
+                setUserEmail(data.user.email);
+                setFullName(data.user.full_name);
+            }
+        } catch (error) {
+            console.error("Failed to fetch profile:", error);
+        }
+    };
 
     useEffect(() => {
         // listen for changes from other tabs
-        const email = typeof window !== "undefined" ? sessionStorage.getItem("email") : null;
-        setIsLoggedIn(!!email);
-        setUserEmail(email || "");
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        setIsLoggedIn(!!token);
+        if (token) fetchProfile();
 
         const handleLoggedIn = (e) => {
-            const email = sessionStorage.getItem("email");
-            setIsLoggedIn(!!email);
-            setUserEmail(email || "");
+            const token = localStorage.getItem("token");
+            setIsLoggedIn(!!token);
+            if (token) fetchProfile();
         };
         window.addEventListener("loggedIn", handleLoggedIn);
 
@@ -38,18 +58,6 @@ export default function Navbar() {
             window.removeEventListener("loggedIn", handleLoggedIn);
         };
     }, []);
-
-    useEffect(() => {
-        setPathname(nextPathname);
-    }, [nextPathname]);
-
-    const handleLogout = () => {
-        sessionStorage.clear();
-        setIsLoggedIn(false);
-        setUserEmail("");
-        // redirect to home
-        window.location.href = "/";
-    };
 
     const publicNav = [
         { href: "/", label: "Home" },
@@ -76,6 +84,7 @@ export default function Navbar() {
             ],
         },
         { href: "/tools", label: "Tools" },
+        { href: "/soql", label: "SOQL" },
     ];
 
     // small helper to show/hide profile menu with slight delay for mouse movement
@@ -116,6 +125,11 @@ export default function Navbar() {
         if (!e.target.closest(".dropdown-container")) {
             setActiveDropdown(null);
         }
+    };
+    const handleLogout = () => {
+        localStorage.clear();
+        router.push("/");
+        window.location.reload();
     };
 
     useEffect(() => {
@@ -159,22 +173,29 @@ export default function Navbar() {
                     animation: fadeIn 0.2s ease-out;
                 }
                 .nav-active {
-                    color: #1d4ed8;
-                    background: #f3f4f6;
-                    font-weight: 700;
-                    box-shadow: 0 2px 8px -2px #1d4ed822;
-                    transition: background 0.2s, color 0.2s, border-bottom 0.2s;
+                    color: #2563eb;
+                    background: #eff6ff;
+                    font-weight: 600;
+                }
+                .nav-active::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -2px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 4px;
+                    height: 4px;
+                    background-color: #2563eb;
+                    border-radius: 50%;
                 }
                 .nav-notActive {
-                    color: #374151;
+                    color: #4b5563;
                     font-weight: 500;
                     background: transparent;
-                    border-bottom: 2px solid transparent;
-                    transition: background 0.2s, color 0.2s, border-bottom 0.2s;
                 }
                 .nav-notActive:hover {
                     color: #1d4ed8;
-                    background: #e0e7ff;
+                    background: #f9fafb;
                 }
 
             `}} />
@@ -212,19 +233,19 @@ export default function Navbar() {
                                         >
                                             <button
                                                 onClick={() => handleDropdownToggle(nav.label)}
-                                                className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${isDropdownActive ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
+                                                className={`flex items-center gap-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${isDropdownActive ? "nav-active" : "nav-notActive"}`}
                                             >
                                                 <span>{nav.label}</span>
-                                                <ChevronDown className="w-4 h-4 text-gray-400" />
+                                                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${activeDropdown === nav.label ? "rotate-180" : ""}`} />
                                             </button>
                                             {activeDropdown === nav.label && (
-                                                <div className="absolute left-0 mt-2 min-w-[180px] bg-white border border-gray-200 shadow-xl rounded-xl z-40 animate-fadeIn">
+                                                <div className="absolute left-0 mt-2 min-w-[180px] bg-white border border-gray-200 shadow-xl rounded-xl z-40 animate-fadeIn p-1">
                                                     {nav.dropdown.map((opt) => (
                                                         <Link
                                                             key={opt.href}
                                                             href={opt.href}
                                                             onClick={() => setActiveDropdown(null)}
-                                                            className={`block px-4 py-2 text-sm rounded-lg transition-colors ${pathname === opt.href ? "nav-active" : "nav-notActive"}`}
+                                                            className={`block px-4 py-2 text-sm rounded-lg transition-colors ${pathname === opt.href ? "bg-blue-50 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"}`}
                                                         >
                                                             {opt.label}
                                                         </Link>
@@ -242,7 +263,6 @@ export default function Navbar() {
                                         className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${pathname === nav.href ? "nav-active" : "nav-notActive"}`}
                                     >
                                         <span className="relative z-10">{nav.label}</span>
-                                        <span className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"></span>
                                     </Link>
                                 );
                             })}
@@ -259,12 +279,19 @@ export default function Navbar() {
                                         <div className="relative">
                                             <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full blur opacity-50 group-hover:opacity-75 transition-opacity"></div>
                                             <div className="relative w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center shadow-md">
-                                                <User className="w-5 h-5 text-white" />
+                                                <span className="text-white font-bold text-sm">
+                                                    {(fullName || userEmail || "U").charAt(0).toUpperCase()}
+                                                </span>
                                             </div>
                                         </div>
-                                        <span className="hidden lg:block text-sm font-medium text-gray-700 max-w-[120px] truncate">
-                                            {userEmail?.split('@')[0] || "User"}
-                                        </span>
+                                        <div className="hidden lg:flex flex-col items-start">
+                                            <span className="text-sm font-semibold text-gray-700">
+                                                {fullName || userEmail?.split('@')[0] || "User"}
+                                            </span>
+                                            <span className="text-[10px] text-gray-500 leading-tight">
+                                                {fullName ? "Member" : "Welcome"}
+                                            </span>
+                                        </div>
                                     </button>
 
                                     {profileOpen && (
@@ -272,11 +299,19 @@ export default function Navbar() {
                                             id="nav-profile-menu"
                                             className="absolute right-0 mt-2 w-64 bg-white/95 backdrop-blur-xl border border-gray-200/50 shadow-2xl rounded-2xl overflow-hidden z-50 animate-fadeIn"
                                         >
-                                            <div className="px-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200/50">
-                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Account</p>
-                                                <p className="text-sm font-medium text-gray-900 truncate">{userEmail || "User"}</p>
+                                            <div className="px-4 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200/50">
+                                                <p className="text-sm font-bold text-gray-900 truncate">{fullName || "User"}</p>
+                                                <p className="text-xs text-gray-500 truncate">{userEmail}</p>
                                             </div>
                                             <div className="py-2">
+                                                <Link
+                                                    href="/plan"
+                                                    onClick={() => setProfileOpen(false)}
+                                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors group"
+                                                >
+                                                    <Zap className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                                                    <span>Plan</span>
+                                                </Link>
                                                 <Link
                                                     href="/profile"
                                                     onClick={() => setProfileOpen(false)}
@@ -284,14 +319,6 @@ export default function Navbar() {
                                                 >
                                                     <User className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
                                                     <span>Profile</span>
-                                                </Link>
-                                                <Link
-                                                    href="/settings"
-                                                    onClick={() => setProfileOpen(false)}
-                                                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors group"
-                                                >
-                                                    <Settings className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
-                                                    <span>Settings</span>
                                                 </Link>
                                                 <div className="my-1 h-px bg-gray-200"></div>
                                                 <button
@@ -341,17 +368,17 @@ export default function Navbar() {
                                     const isDropdownActive = nav.dropdown.some(opt => opt.href === pathname);
                                     return (
                                         <details key={nav.label} className="mb-2">
-                                            <summary className={`flex items-center gap-2 px-4 py-3 text-base font-medium rounded-lg cursor-pointer ${isDropdownActive ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}>
+                                            <summary className={`flex items-center gap-2 px-4 py-3 text-base font-medium rounded-lg cursor-pointer ${isDropdownActive ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}>
                                                 {nav.label}
                                                 <ChevronDown className="w-4 h-4 text-gray-400" />
                                             </summary>
-                                            <div className="ml-4">
+                                            <div className="ml-4 mt-1 space-y-1">
                                                 {nav.dropdown.map(opt => (
                                                     <Link
                                                         key={opt.href}
                                                         href={opt.href}
                                                         onClick={() => setMenuOpen(false)}
-                                                        className={`block px-4 py-2 text-base rounded-lg transition-colors ${pathname === opt.href ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
+                                                        className={`block px-4 py-2 text-sm rounded-lg transition-colors ${pathname === opt.href ? "bg-blue-100 text-blue-800 font-semibold" : "text-gray-600 hover:text-blue-700 hover:bg-blue-50/50"}`}
                                                     >
                                                         {opt.label}
                                                     </Link>
@@ -365,7 +392,7 @@ export default function Navbar() {
                                         key={nav.href}
                                         href={nav.href}
                                         onClick={() => setMenuOpen(false)}
-                                        className={`block px-4 py-3 text-base font-medium rounded-lg transition-colors ${pathname === nav.href ? "nav-active" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
+                                        className={`block px-4 py-3 text-base font-medium rounded-lg transition-colors ${pathname === nav.href ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:text-blue-700 hover:bg-blue-50/50"}`}
                                     >
                                         {nav.label}
                                     </Link>

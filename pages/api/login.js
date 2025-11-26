@@ -47,6 +47,16 @@ export default async function handler(req, res) {
         // (optional, only if you're managing server sessions manually)
         // res.setHeader("Set-Cookie", `sb:token=${data.session.access_token}; Path=/; HttpOnly; Secure; SameSite=Lax`);
 
+        // Check if user has any organizations
+        const { count, error: orgError } = await supabase
+            .from("organizations")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", data.user.id);
+
+        if (orgError) {
+            console.error("Error checking organizations:", orgError);
+        }
+
         return res.status(200).json({
             success: true,
             message: "Login successful.",
@@ -55,6 +65,7 @@ export default async function handler(req, res) {
                 email: data.user?.email,
             },
             session: data.session,
+            hasOrganization: count > 0,
         });
     } catch (err) {
         console.error("Unexpected login error:", err);
