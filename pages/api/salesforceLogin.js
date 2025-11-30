@@ -36,9 +36,10 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: "User profile not found" });
     }
 
+    // 🔐 Fetch organizations with DECRYPTED credentials using Vault view
     const { data: orgs, error: orgError } = await supabase
-      .from("organizations")
-      .select("id, org_email, org_password, security_token, is_sandbox")
+      .from("organizations_decrypted") // Using decrypted view
+      .select("id, org_email, org_password, security_token, is_sandbox, instance_url, org_name")
       .eq("user_id", profile.id);
 
     if (orgError) {
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: false, error: "No org present" });
     }
 
-    // 🔹 Login to all orgs concurrently and fetch org details
+    // 🔹 Login to all  orgs concurrently and fetch org details
     const results = await Promise.all(
       orgs.map(async (org) => {
         const loginUrl = org.is_sandbox
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
         const conn = new jsforce.Connection({ loginUrl });
 
         try {
-          // 🔑 Login using org credentials
+          // 🔑 Login using DECRYPTED org credentials
           await conn.login(
             org.org_email,
             org.org_password + (org.security_token || "")

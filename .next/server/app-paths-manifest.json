@@ -1,5 +1,7 @@
 {
   "/page": "app/page.js",
+  "/compare/page": "app/compare/page.js",
   "/login/page": "app/login/page.js",
+  "/metadata/page": "app/metadata/page.js",
   "/soql/page": "app/soql/page.js"
 }

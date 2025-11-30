@@ -1,7 +1,5 @@
 {
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
-  "/_document": "pages/_document.js",
-  "/api/metadata/fields": "pages/api/metadata/fields.js",
-  "/api/salesforceLogin": "pages/api/salesforceLogin.js"
+  "/_document": "pages/_document.js"
 }

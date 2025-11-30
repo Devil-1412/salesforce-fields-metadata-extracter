@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Editor from "react-simple-code-editor";
 import { highlight, languages } from "prismjs/components/prism-core";
 import "prismjs/components/prism-sql";
+import ConfirmDialog from "../components/ConfirmDialog";
 // import "prismjs/themes/prism-tomorrow.css"; // Dynamic loading instead
 
 const THEMES = [
@@ -32,6 +33,30 @@ const THEMES = [
     { id: "prism-vsc-dark-plus.css", label: "VSC Dark Plus" },
     { id: "prism.css", label: "Default" },
 ];
+
+    const SOQL_KEYWORDS = [
+        'SELECT', 'FROM', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING',
+        'LIMIT', 'OFFSET', 'FOR VIEW', 'FOR REFERENCE', 'UPDATE TRACKING', 'UPDATE VIEWSTAT',
+        'AND', 'OR', 'NOT', 'IN', 'NOT IN', 'INCLUDES', 'EXCLUDES', 'LIKE',
+        'ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST',
+        'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
+        'TRUE', 'FALSE', 'NULL',
+        'DATE', 'DATETIME', 'time',
+        'YESTERDAY', 'TODAY', 'TOMORROW',
+        'LAST_WEEK', 'THIS_WEEK', 'NEXT_WEEK',
+        'LAST_MONTH', 'THIS_MONTH', 'NEXT_MONTH',
+        'LAST_90_DAYS', 'NEXT_90_DAYS',
+        'LAST_N_DAYS', 'NEXT_N_DAYS',
+        'N_DAYS_AGO', 'NEXT_N_WEEKS', 'LAST_N_WEEKS',
+        'NEXT_N_MONTHS', 'LAST_N_MONTHS',
+        'NEXT_N_QUARTERS', 'LAST_N_QUARTERS',
+        'NEXT_N_YEARS', 'LAST_N_YEARS',
+        'THIS_QUARTER', 'LAST_QUARTER', 'NEXT_QUARTER',
+        'THIS_YEAR', 'LAST_YEAR', 'NEXT_YEAR',
+        'THIS_FISCAL_QUARTER', 'LAST_FISCAL_QUARTER', 'NEXT_FISCAL_QUARTER',
+        'THIS_FISCAL_YEAR', 'LAST_FISCAL_YEAR', 'NEXT_FISCAL_YEAR',
+        'TYPEOF', 'WITH', 'USING SCOPE'
+    ];
 
 export default function SoqlPage() {
     const router = useRouter();
@@ -66,15 +91,25 @@ export default function SoqlPage() {
     const [fieldsCache, setFieldsCache] = useState({});
     const [loadingMetadata, setLoadingMetadata] = useState(false);
 
-    // SOQL Keywords for autocomplete
-    const SOQL_KEYWORDS = [
-        'SELECT', 'FROM', 'WHERE', 'ORDER BY', 'GROUP BY',
-        'LIMIT', 'OFFSET', 'AND', 'OR', 'NOT', 'LIKE',
-        'IN', 'NOT IN', 'INCLUDES', 'EXCLUDES',
-        'ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST',
-        'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
-        'HAVING', 'TRUE', 'FALSE', 'NULL'
-    ];
+    // Saved Queries State
+    const [savedQueries, setSavedQueries] = useState([]);
+    const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+    const [newQueryName, setNewQueryName] = useState("");
+    const [savingQuery, setSavingQuery] = useState(false);
+    const [loadingQueries, setLoadingQueries] = useState(false);
+
+    // Delete Confirmation State
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [queryToDelete, setQueryToDelete] = useState(null);
+
+    // Table Filtering State
+    const [columnFilters, setColumnFilters] = useState({}); // { columnName: { type: 'equals', value: 'test' } }
+    const [activeFilterColumn, setActiveFilterColumn] = useState(null);
+    const [showFilterModal, setShowFilterModal] = useState(false);
+    const [filterType, setFilterType] = useState('contains');
+    const [filterValue, setFilterValue] = useState('');
+
+
 
     useEffect(() => {
         const linkId = 'prism-theme-link';
@@ -160,7 +195,9 @@ export default function SoqlPage() {
         const savedInstance = localStorage.getItem("instanceUrl");
         const initialOrg =
             orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
-        selectOrg(initialOrg.instanceUrl, { silent: true });
+        if (initialOrg) {
+            selectOrg(initialOrg.instanceUrl, { silent: true });
+        }
     }, [orgs, selectOrg]);
 
     const executeQuery = async () => {
@@ -241,13 +278,182 @@ export default function SoqlPage() {
         return { ...results, records: sortedRecords };
     };
 
+    // Apply column filters to results
+    const getFilteredResults = () => {
+        if (!results || !results.records) return results;
+
+        let filteredRecords = [...results.records];
+
+        // Apply each column filter
+        Object.entries(columnFilters).forEach(([column, filter]) => {
+            filteredRecords = filteredRecords.filter(record => {
+                const value = record[column];
+                const filterVal = filter.value;
+
+                switch (filter.type) {
+                    case 'equals':
+                        return String(value).toLowerCase() === String(filterVal).toLowerCase();
+                    case 'notEquals':
+                        return String(value).toLowerCase() !== String(filterVal).toLowerCase();
+                    case 'contains':
+                        return String(value).toLowerCase().includes(String(filterVal).toLowerCase());
+                    case 'startsWith':
+                        return String(value).toLowerCase().startsWith(String(filterVal).toLowerCase());
+                    case 'endsWith':
+                        return String(value).toLowerCase().endsWith(String(filterVal).toLowerCase());
+                    case 'greaterThan':
+                        return Number(value) > Number(filterVal);
+                    case 'lessThan':
+                        return Number(value) < Number(filterVal);
+                    case 'isNull':
+                        return value == null || value === '';
+                    case 'isNotNull':
+                        return value != null && value !== '';
+                    default:
+                        return true;
+                }
+            });
+        });
+
+        return { ...results, records: filteredRecords, totalSize: filteredRecords.length };
+    };
+
+    // Get results with both sorting and filtering applied
+    const getProcessedResults = () => {
+        const filtered = getFilteredResults();
+        if (!sortColumn) return filtered;
+
+        const sortedRecords = [...filtered.records].sort((a, b) => {
+            let aVal = a[sortColumn];
+            let bVal = b[sortColumn];
+
+            if (aVal == null && bVal == null) return 0;
+            if (aVal == null) return 1;
+            if (bVal == null) return -1;
+
+            if (typeof aVal === 'object') aVal = JSON.stringify(aVal);
+            if (typeof bVal === 'object') bVal = JSON.stringify(bVal);
+
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                return sortDirection === 'asc'
+                    ? aVal.localeCompare(bVal)
+                    : bVal.localeCompare(aVal);
+            } else {
+                return sortDirection === 'asc'
+                    ? (aVal > bVal ? 1 : -1)
+                    : (bVal > aVal ? 1 : -1);
+            }
+        });
+
+        return { ...filtered, records: sortedRecords };
+    };
+
+    // Open filter modal for a column
+    const openFilterModal = (column) => {
+        setActiveFilterColumn(column);
+        if (columnFilters[column]) {
+            setFilterType(columnFilters[column].type);
+            setFilterValue(columnFilters[column].value);
+        } else {
+            setFilterType('contains');
+            setFilterValue('');
+        }
+        setShowFilterModal(true);
+    };
+
+    // Apply filter to a column
+    const applyColumnFilter = () => {
+        if (!activeFilterColumn) return;
+
+        const needsValue = !['isNull', 'isNotNull'].includes(filterType);
+        if (needsValue && !filterValue.trim()) {
+            toast.error('Please enter a filter value');
+            return;
+        }
+
+        setColumnFilters(prev => ({
+            ...prev,
+            [activeFilterColumn]: {
+                type: filterType,
+                value: filterValue
+            }
+        }));
+
+        setShowFilterModal(false);
+        setActiveFilterColumn(null);
+        setFilterValue('');
+        toast.success(`Filter applied to ${activeFilterColumn}`);
+    };
+
+    // Remove filter from a column
+    const removeColumnFilter = (column) => {
+        setColumnFilters(prev => {
+            const newFilters = { ...prev };
+            delete newFilters[column];
+            return newFilters;
+        });
+        toast.success(`Filter removed from ${column}`);
+    };
+
+    // Clear all filters
+    const clearAllFilters = () => {
+        setColumnFilters({});
+        toast.success('All filters cleared');
+    };
+
+    // Export to CSV
+    const exportToCSV = () => {
+        const processedResults = getProcessedResults();
+        if (!processedResults || !processedResults.records || processedResults.records.length === 0) {
+            toast.error('No data to export');
+            return;
+        }
+
+        const records = processedResults.records;
+        const columns = Object.keys(records[0]).filter(key => key !== 'attributes');
+
+        // Create CSV header
+        const csvHeader = columns.join(',');
+
+        // Create CSV rows
+        const csvRows = records.map(record => {
+            return columns.map(column => {
+                const value = record[column];
+                if (value == null) return '';
+                if (typeof value === 'object') return JSON.stringify(value).replace(/"/g, '""');
+                const stringValue = String(value);
+                // Escape quotes and wrap in quotes if contains comma or newline
+                if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            }).join(',');
+        });
+
+        // Combine header and rows
+        const csv = [csvHeader, ...csvRows].join('\n');
+
+        // Create download link
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `soql_results_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast.success(`Exported ${records.length} records to CSV`);
+    };
+
     // Fetch all objects metadata
     const fetchObjects = useCallback(async () => {
         if (objectsCache.length > 0 || !instanceUrl || !token) return;
 
         setLoadingMetadata(true);
         try {
-            const res = await fetch('/api/metadata/objects', {
+            const res = await fetch('/api/metadata/describe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ accessToken: token, instanceUrl }),
@@ -268,7 +474,7 @@ export default function SoqlPage() {
         if (fieldsCache[objectName] || !instanceUrl || !token) return;
 
         try {
-            const res = await fetch('/api/metadata/fields', {
+            const res = await fetch('/api/metadata/describe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ accessToken: token, instanceUrl, objectName }),
@@ -292,126 +498,397 @@ export default function SoqlPage() {
         }
     }, [instanceUrl, token, fetchObjects]);
 
+    // Fetch saved queries
+    const fetchSavedQueries = useCallback(async () => {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        setLoadingQueries(true);
+        try {
+            const res = await fetch('/api/queries/list', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSavedQueries(data.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch saved queries:', err);
+            toast.error("Failed to load saved queries");
+        } finally {
+            setLoadingQueries(false);
+        }
+    }, []);
+
+    // Load saved queries on mount
+    useEffect(() => {
+        fetchSavedQueries();
+    }, [fetchSavedQueries]);
+
+    // Save Query Handler
+    const handleSaveQuery = async () => {
+        if (!newQueryName.trim()) {
+            toast.error("Please enter a name for the query");
+            return;
+        }
+
+        const token = localStorage.getItem("token");
+        if (!token) {
+            toast.error("Please sign in to save queries");
+            return;
+        }
+
+        setSavingQuery(true);
+        try {
+            const res = await fetch('/api/queries/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: newQueryName,
+                    query: query
+                })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                toast.success("Query saved successfully");
+                setIsSaveModalOpen(false);
+                setNewQueryName("");
+                fetchSavedQueries();
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err) {
+            toast.error(err.message || "Failed to save query");
+        } finally {
+            setSavingQuery(false);
+        }
+    };
+
+    // Delete Query Handler
+    const handleDeleteQuery = async (id, e) => {
+        e.stopPropagation();
+        setQueryToDelete(id);
+        setShowDeleteConfirm(true);
+    };
+
+    // Confirm Delete Query
+    const confirmDeleteQuery = async () => {
+        if (!queryToDelete) return;
+
+        const token = localStorage.getItem("token");
+        try {
+            const res = await fetch(`/api/queries/delete?id=${queryToDelete}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                toast.success("Query deleted");
+                fetchSavedQueries();
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (err) {
+            toast.error(err.message || "Failed to delete query");
+        } finally {
+            setQueryToDelete(null);
+        }
+    };
+
+    // Load a saved query
+    const loadSavedQuery = (savedQuery) => {
+        setQuery(savedQuery.query);
+        toast.success(`Loaded query: ${savedQuery.name}`);
+    };
+
+    // Helper to parse query and find context
+    const getQueryContext = (text, cursorPos) => {
+        // Simple tokenizer
+        const tokens = [];
+        let currentToken = '';
+        let currentStart = 0;
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (/\s/.test(char) || [',', '(', ')'].includes(char)) {
+                if (currentToken) {
+                    tokens.push({ text: currentToken, start: currentStart, end: i });
+                    currentToken = '';
+                }
+                if (char !== ' ') {
+                     tokens.push({ text: char, start: i, end: i + 1 });
+                }
+            } else {
+                if (!currentToken) currentStart = i;
+                currentToken += char;
+            }
+        }
+        if (currentToken) {
+            tokens.push({ text: currentToken, start: currentStart, end: text.length });
+        }
+
+        // Find token at cursor
+        // We want to know the "active" word being typed
+        let activeWord = '';
+        
+        if (cursorPos > 0 && /\s/.test(text[cursorPos - 1])) {
+             // New word
+        } else {
+             // Find the token intersecting cursor
+             const cursorTokenIndex = tokens.findIndex(t => cursorPos >= t.start && cursorPos <= t.end);
+             if (cursorTokenIndex !== -1) {
+                 activeWord = tokens[cursorTokenIndex].text;
+             }
+        }
+
+        // Determine Clause
+        let clause = 'SELECT'; // Default
+        let objectName = null;
+        let objectToken = null;
+        
+        // Scan tokens to find clauses and FROM object
+        for (let i = 0; i < tokens.length; i++) {
+            const t = tokens[i];
+            const upper = t.text.toUpperCase();
+            
+            if (['SELECT', 'FROM', 'WHERE', 'ORDER', 'GROUP', 'HAVING', 'LIMIT', 'OFFSET'].includes(upper)) {
+                // If we are BEFORE the cursor, this sets the current clause
+                if (t.end <= cursorPos) {
+                    if (upper === 'ORDER' || upper === 'GROUP') {
+                         // Check next token for BY
+                         if (tokens[i+1] && tokens[i+1].text.toUpperCase() === 'BY') {
+                             clause = upper + ' BY';
+                             i++; // Skip BY
+                         } else {
+                             clause = upper;
+                         }
+                    } else {
+                        clause = upper;
+                    }
+                }
+            }
+
+            // Capture Object Name from FROM clause
+            // We look for FROM and take the next token as object name
+            if (upper === 'FROM' && tokens[i+1]) {
+                objectName = tokens[i+1].text;
+                objectToken = tokens[i+1];
+            }
+        }
+
+        return {
+            clause,
+            objectName,
+            objectToken,
+            activeWord
+        };
+    };
+
     // Get suggestions based on current query
     const getSuggestions = useCallback((queryText, cursorPos) => {
-        const beforeCursor = queryText.substring(0, cursorPos);
-        const words = beforeCursor.trim().split(/\s+/);
-        const currentWord = words[words.length - 1] || '';
-        const upperQuery = beforeCursor.toUpperCase();
+        const { clause, objectName, objectToken, activeWord } = getQueryContext(queryText, cursorPos);
+        
+        // User request: "suggestions should come after a character is typd"
+        if (!activeWord || activeWord.trim().length === 0) {
+            return [];
+        }
 
+        const upperWord = activeWord.toUpperCase();
+        
         let suggestions = [];
 
-        // Determine context
-        const hasSelect = upperQuery.includes('SELECT');
-        const hasFrom = upperQuery.includes('FROM');
-        const fromMatch = upperQuery.match(/FROM\s+(\w+)/);
-        const objectName = fromMatch ? fromMatch[1] : null;
+        // 1. Suggest Object if in FROM clause
+        if (clause === 'FROM') {
+             // If we have an object token and the cursor is AFTER it (meaning we finished typing it)
+             // Then we should NOT suggest objects anymore, but keywords (like WHERE, LIMIT, etc.)
+             if (objectToken && cursorPos > objectToken.end) {
+                 // Fall through to keyword suggestions
+             } else {
+                 suggestions = objectsCache
+                    .filter(obj => obj.name.toLowerCase().includes(activeWord.toLowerCase()))
+                    .map(obj => ({
+                        text: obj.name,
+                        label: obj.label,
+                        type: 'object'
+                    }));
+                 return suggestions.slice(0, 50);
+             }
+        }
 
-        if (!hasSelect) {
-            // Suggest SELECT first
-            suggestions = ['SELECT'].filter(k => k.startsWith(currentWord.toUpperCase()));
-        } else if (hasSelect && !hasFrom) {
-            // Between SELECT and FROM - suggest fields or FROM
-            if (currentWord.toUpperCase() === 'FROM' || 'FROM'.startsWith(currentWord.toUpperCase())) {
-                suggestions.push('FROM');
-            }
-            // Also suggest aggregate functions
-            const functions = ['COUNT()', 'SUM()', 'AVG()', 'MIN()', 'MAX()'];
-            suggestions.push(...functions.filter(f => f.startsWith(currentWord.toUpperCase())));
-        } else if (hasFrom && currentWord && !objectName) {
-            // Right after FROM - suggest objects
-            suggestions = objectsCache
-                .filter(obj => obj.name.toLowerCase().startsWith(currentWord.toLowerCase()))
-                .map(obj => ({
-                    text: obj.name,
-                    label: obj.label,
-                    type: 'object'
-                }));
-        } else if (objectName) {
-            // After object name - suggest WHERE, ORDER BY, etc or fields
-            const keywords = ['WHERE', 'ORDER BY', 'GROUP BY', 'LIMIT', 'OFFSET']
-                .filter(k => k.startsWith(currentWord.toUpperCase()));
-
-            // Load fields for this object if not cached
-            if (!fieldsCache[objectName]) {
+        // 2. Suggest Fields if we have an object and are in SELECT, WHERE, ORDER BY, GROUP BY, HAVING
+        if (objectName && ['SELECT', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING'].includes(clause)) {
+            // Ensure fields are loaded
+            if (!fieldsCache[objectName] && !loadingMetadata) {
                 fetchFields(objectName);
             }
 
-            // Add field suggestions
             const fields = fieldsCache[objectName] || [];
             const fieldSuggestions = fields
-                .filter(f => f.name.toLowerCase().startsWith(currentWord.toLowerCase()))
+                .filter(f => f.name.toLowerCase().includes(activeWord.toLowerCase()))
                 .map(f => ({
                     text: f.name,
                     label: f.label,
                     type: f.type
                 }));
-
-            suggestions = [
-                ...keywords.map(k => ({ text: k, type: 'keyword' })),
-                ...fieldSuggestions
-            ];
-        } else {
-            // General - suggest SOQL keywords
-            suggestions = SOQL_KEYWORDS
-                .filter(k => k.startsWith(currentWord.toUpperCase()))
-                .map(k => ({ text: k, type: 'keyword' }));
+            
+            suggestions = [...suggestions, ...fieldSuggestions];
         }
 
-        return suggestions.slice(0, 10); // Limit to 10 suggestions
-    }, [objectsCache, fieldsCache, SOQL_KEYWORDS, fetchFields]);
+        // 3. Suggest Keywords (Context sensitive could be better, but global is okay for now)
+        // Filter keywords that match
+        const keywordSuggestions = SOQL_KEYWORDS
+            .filter(k => k.startsWith(upperWord) && k !== upperWord) // Don't suggest if already typed exactly
+            .map(k => ({ text: k, type: 'keyword' }));
+
+        suggestions = [...suggestions, ...keywordSuggestions];
+
+        // Sort: Exact matches first, then startsWith, then includes
+        suggestions.sort((a, b) => {
+            const aText = a.text.toLowerCase();
+            const bText = b.text.toLowerCase();
+            const word = activeWord.toLowerCase();
+            
+            const aStarts = aText.startsWith(word);
+            const bStarts = bText.startsWith(word);
+            
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            
+            return aText.localeCompare(bText);
+        });
+
+        return suggestions.slice(0, 20);
+    }, [objectsCache, fieldsCache, fetchFields, loadingMetadata]);
+
+    // Handle editor key down for execution
+    const handleEditorKeyDown = (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            executeQuery();
+        }
+    };
 
     // Handle query change and update suggestions
     const handleQueryChange = (newQuery) => {
         setQuery(newQuery);
-
-        // Get cursor position (end of text for now)
-        const cursorPos = newQuery.length;
-        setCursorPosition(cursorPos);
-
-        // Get and show suggestions
-        const newSuggestions = getSuggestions(newQuery, cursorPos);
-        setSuggestions(newSuggestions);
-        setShowSuggestions(newSuggestions.length > 0);
-        setSelectedSuggestionIndex(0);
     };
 
-    // Handle keyboard navigation in suggestions
-    const handleKeyDown = (e) => {
-        if (!showSuggestions) return;
-
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSelectedSuggestionIndex(prev =>
-                prev < suggestions.length - 1 ? prev + 1 : prev
-            );
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : 0);
-        } else if (e.key === 'Enter' && suggestions.length > 0) {
-            e.preventDefault();
-            applySuggestion(suggestions[selectedSuggestionIndex]);
-        } else if (e.key === 'Escape') {
-            setShowSuggestions(false);
+    // Update suggestions when query or cursor changes (debounced slightly or on effect)
+    useEffect(() => {
+        // We need cursor position from the editor. 
+        // Since react-simple-code-editor doesn't give cursor pos in onValueChange easily,
+        // we might need to track it or just use the end of the string if we can't get it.
+        // However, for a better experience, we really need the cursor position.
+        // We can capture it from the selection event on the textarea.
+        
+        // For now, we will use a simple approach: 
+        // If the user is typing, we assume the cursor is at the end of the changed part? 
+        // No, that's hard.
+        // Let's rely on the textarea's selectionStart if we can get a ref, 
+        // but Editor doesn't expose the textarea ref easily.
+        // WORKAROUND: We will assume the cursor is at the end of the query for now, 
+        // OR we can try to find the active word by looking at the diff?
+        // Actually, let's try to get the cursor position from the DOM active element if it's the textarea.
+        
+        const textarea = document.querySelector('textarea.npm__react-simple-code-editor__textarea');
+        if (textarea) {
+             const pos = textarea.selectionStart;
+             setCursorPosition(pos);
+             const newSuggestions = getSuggestions(query, pos);
+             setSuggestions(newSuggestions);
+             setShowSuggestions(newSuggestions.length > 0);
+             setSelectedSuggestionIndex(0); // Auto-select first suggestion
+        } else {
+             // Fallback
+             const pos = query.length;
+             setCursorPosition(pos);
+             const newSuggestions = getSuggestions(query, pos);
+             setSuggestions(newSuggestions);
+             setShowSuggestions(newSuggestions.length > 0);
+             setSelectedSuggestionIndex(0); // Auto-select first suggestion
         }
-    };
+    }, [query, getSuggestions]);
+
 
     // Apply selected suggestion
     const applySuggestion = (suggestion) => {
         const suggestionText = typeof suggestion === 'string' ? suggestion : suggestion.text;
+        
+        // We need to replace the "active word" with the suggestion
+        const { activeWord } = getQueryContext(query, cursorPosition);
+        
+        // Calculate start and end of the active word
+        // We can do this by searching backwards and forwards from cursor
+        // But getQueryContext already did some tokenizing. 
+        // Let's just do a simple replacement relative to cursor.
+        
         const beforeCursor = query.substring(0, cursorPosition);
         const afterCursor = query.substring(cursorPosition);
-
-        // Find the word being completed
-        const words = beforeCursor.split(/\s+/);
-        const currentWord = words[words.length - 1] || '';
-        const beforeWord = beforeCursor.substring(0, beforeCursor.length - currentWord.length);
-
-        // Insert suggestion
-        const newQuery = beforeWord + suggestionText + ' ' + afterCursor;
+        
+        // If we are in the middle of a word, remove the whole word
+        // Find word boundary before
+        let start = cursorPosition;
+        while (start > 0 && /[a-zA-Z0-9_]/.test(query[start - 1])) {
+            start--;
+        }
+        
+        // Find word boundary after
+        let end = cursorPosition;
+        while (end < query.length && /[a-zA-Z0-9_]/.test(query[end])) {
+            end++;
+        }
+        
+        // Add a space after the suggestion
+        const newQuery = query.substring(0, start) + suggestionText + ' ' + query.substring(end);
+        
         setQuery(newQuery);
         setShowSuggestions(false);
+        
+        // Move cursor to end of inserted word + space
+        // We need to wait for render to set cursor? 
+        // React state update is async. 
+        // The Editor component might reset cursor. 
+        // This is a known issue with controlled inputs.
+        // We'll let the user type for now.
     };
+
+    // Global key listener for suggestions
+    useEffect(() => {
+        if (!showSuggestions) return;
+
+        const handleGlobalKeyDown = (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev =>
+                    prev < suggestions.length - 1 ? prev + 1 : prev
+                );
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : 0);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (suggestions.length > 0) {
+                    applySuggestion(suggestions[selectedSuggestionIndex]);
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowSuggestions(false);
+            } else if (e.key === 'Tab') {
+                 e.preventDefault();
+                 if (suggestions.length > 0) {
+                     applySuggestion(suggestions[selectedSuggestionIndex]);
+                 }
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalKeyDown);
+        return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    }, [showSuggestions, suggestions, selectedSuggestionIndex, applySuggestion]);
 
     return (
         <div className="min-h-screen bg-slate-50 py-6 px-3 sm:px-3 relative">
@@ -492,6 +969,46 @@ export default function SoqlPage() {
                                         <p>Hover over a theme to preview it. Click to apply.</p>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Save Query Modal */}
+            {isSaveModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setIsSaveModalOpen(false)}>
+                    <div 
+                        className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 p-6"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Save Query</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Query Name</label>
+                                <input
+                                    type="text"
+                                    value={newQueryName}
+                                    onChange={(e) => setNewQueryName(e.target.value)}
+                                    placeholder="e.g., Active Accounts"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsSaveModalOpen(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveQuery}
+                                    disabled={savingQuery}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                    {savingQuery ? "Saving..." : "Save"}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -590,11 +1107,12 @@ export default function SoqlPage() {
                         <div className="relative">
                             <div
                                 className="rounded-xl border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-500"
-                                onKeyDown={handleKeyDown}
                             >
                                 <Editor
                                     value={query}
                                     onValueChange={handleQueryChange}
+                                    onKeyDown={handleEditorKeyDown}
+                                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                                     highlight={code => highlight(code, languages.sql)}
                                     padding={16}
                                     style={{
@@ -648,15 +1166,92 @@ export default function SoqlPage() {
                             )}
                         </div>
                     </div>
-                    <div className="flex justify-end">
-                        <button
-                            onClick={executeQuery}
-                            disabled={executing || !selectedOrgId}
-                            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            {executing ? "Executing..." : "Execute Query"}
-                        </button>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between mt-4">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={executeQuery}
+                                disabled={executing || !query.trim()}
+                                className={`
+                                    flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm shadow-lg shadow-indigo-200 transition-all
+                                    ${executing || !query.trim()
+                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-300 hover:-translate-y-0.5 active:translate-y-0'
+                                    }
+                                `}
+                            >
+                                {executing ? (
+                                    <>
+                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Executing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Execute Query
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setIsSaveModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                </svg>
+                                Save Query
+                            </button>
+                        </div>
+                        <div className="text-xs text-gray-500 font-mono">
+                            <span className="bg-gray-100 px-2 py-1 rounded border border-gray-200">Ctrl + Enter</span> to execute
+                        </div>
                     </div>
+
+                    {/* Saved Queries Section */}
+                    {savedQueries.length > 0 && (
+                        <div className="border-t border-gray-100 pt-6 mt-6">
+                            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                </svg>
+                                Saved Queries
+                            </h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {savedQueries.map((sq) => (
+                                    <div 
+                                        key={sq.id}
+                                        onClick={() => loadSavedQuery(sq)}
+                                        className="group relative flex items-start justify-between p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-white hover:border-indigo-200 hover:shadow-md transition-all cursor-pointer"
+                                    >
+                                        <div className="flex-1 min-w-0 mr-2">
+                                            <h4 className="text-sm font-medium text-gray-900 truncate group-hover:text-indigo-600 transition-colors">
+                                                {sq.name}
+                                            </h4>
+                                            <p className="text-xs text-gray-500 font-mono truncate mt-1 opacity-70">
+                                                {sq.query}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={(e) => handleDeleteQuery(sq.id, e)}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                            title="Delete query"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </section>
 
                 {error && (
@@ -668,9 +1263,54 @@ export default function SoqlPage() {
                 {results && (
                     <section className="rounded-3xl bg-white p-6 shadow-xl overflow-hidden">
                         <div className="mb-4 flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-gray-900">Query Results</h2>
-                            <span className="text-sm text-gray-500">Total Records: {results.totalSize}</span>
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-lg font-bold text-gray-900">Query Results</h2>
+                                <span className="text-sm text-gray-500">Total Records: {getProcessedResults().totalSize}</span>
+                            </div>
+                            <button
+                                onClick={exportToCSV}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors shadow-sm"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Export CSV
+                            </button>
                         </div>
+
+                        {/* Active Filters */}
+                        {Object.keys(columnFilters).length > 0 && (
+                            <div className="mb-4 flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-medium text-gray-600">Active Filters:</span>
+                                {Object.entries(columnFilters).map(([column, filter]) => (
+                                    <div key={column} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-xs font-medium text-indigo-700">
+                                        <span className="font-semibold">{column}</span>
+                                        <span className="text-indigo-500">·</span>
+                                        <span className="capitalize">{filter.type.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                        {filter.value && (
+                                            <>
+                                                <span className="text-indigo-500">·</span>
+                                                <span className="max-w-[100px] truncate">{filter.value}</span>
+                                            </>
+                                        )}
+                                        <button
+                                            onClick={() => removeColumnFilter(column)}
+                                            className="ml-1 p-0.5 rounded-full hover:bg-indigo-100 transition-colors"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                                <button
+                                    onClick={clearAllFilters}
+                                    className="text-xs text-red-600 hover:text-red-700 font-medium underline"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+                        )}
 
                         <div className="overflow-x-auto max-h-[600px] overflow-y-auto border border-gray-200 rounded-lg">
                             {results.records && results.records.length > 0 ? (
@@ -683,29 +1323,45 @@ export default function SoqlPage() {
                                                     <th
                                                         key={key}
                                                         scope="col"
-                                                        onClick={() => handleSort(key)}
-                                                        className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider cursor-pointer hover:bg-white/10 transition-colors select-none"
+                                                        className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider group relative"
                                                     >
-                                                        <div className="flex items-center gap-2">
-                                                            <span>{key}</span>
-                                                            {sortColumn === key && (
-                                                                <svg
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    className={`h-4 w-4 transition-transform ${sortDirection === 'desc' ? 'rotate-180' : ''}`}
-                                                                    fill="none"
-                                                                    viewBox="0 0 24 24"
-                                                                    stroke="currentColor"
-                                                                >
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                        <div className="flex items-center gap-2 justify-between">
+                                                            <div 
+                                                                onClick={() => handleSort(key)}
+                                                                className="flex items-center gap-2 cursor-pointer hover:text-blue-100 transition-colors"
+                                                            >
+                                                                <span>{key}</span>
+                                                                {sortColumn === key && (
+                                                                    <svg
+                                                                        xmlns="http://www.w3.org/2000/svg"
+                                                                        className={`h-4 w-4 transition-transform ${sortDirection === 'desc' ? 'rotate-180' : ''}`}
+                                                                        fill="none"
+                                                                        viewBox="0 0 24 24"
+                                                                        stroke="currentColor"
+                                                                    >
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                                    </svg>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    openFilterModal(key);
+                                                                }}
+                                                                className={`opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/20 transition-all ${columnFilters[key] ? '!opacity-100 bg-white/20' : ''}`}
+                                                                title="Filter column"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${columnFilters[key] ? 'text-yellow-300' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                                                 </svg>
-                                                            )}
+                                                            </button>
                                                         </div>
                                                     </th>
                                                 ))}
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {getSortedResults().records.map((record, idx) => (
+                                        {getProcessedResults().records.map((record, idx) => (
                                             <tr key={idx} className="hover:bg-indigo-50 transition-colors">
                                                 {Object.keys(record)
                                                     .filter(key => key !== 'attributes')
@@ -733,6 +1389,97 @@ export default function SoqlPage() {
                         </div>
                     </section>
                 )}
+
+                {/* Filter Modal */}
+                {showFilterModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowFilterModal(false)}>
+                        <div 
+                            className="w-full max-w-md bg-white rounded-xl shadow-2xl border border-slate-200 p-6"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Filter Column: {activeFilterColumn}</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Filter Type</label>
+                                    <select
+                                        value={filterType}
+                                        onChange={(e) => setFilterType(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    >
+                                        <option value="contains">Contains</option>
+                                        <option value="equals">Equals</option>
+                                        <option value="notEquals">Not Equals</option>
+                                        <option value="startsWith">Starts With</option>
+                                        <option value="endsWith">Ends With</option>
+                                        <option value="greaterThan">Greater Than</option>
+                                        <option value="lessThan">Less Than</option>
+                                        <option value="isNull">Is Null/Empty</option>
+                                        <option value="isNotNull">Is Not Null/Empty</option>
+                                    </select>
+                                </div>
+
+                                {!['isNull', 'isNotNull'].includes(filterType) && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Filter Value</label>
+                                        <input
+                                            type="text"
+                                            value={filterValue}
+                                            onChange={(e) => setFilterValue(e.target.value)}
+                                            placeholder="Enter value..."
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                            autoFocus
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between gap-3 pt-2">
+                                    <div>
+                                        {columnFilters[activeFilterColumn] && (
+                                            <button
+                                                onClick={() => {
+                                                    removeColumnFilter(activeFilterColumn);
+                                                    setShowFilterModal(false);
+                                                }}
+                                                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                            >
+                                                Remove Filter
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setShowFilterModal(false)}
+                                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={applyColumnFilter}
+                                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                                        >
+                                            Apply Filter
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Delete Confirmation Dialog */}
+                <ConfirmDialog
+                    isOpen={showDeleteConfirm}
+                    onClose={() => {
+                        setShowDeleteConfirm(false);
+                        setQueryToDelete(null);
+                    }}
+                    onConfirm={confirmDeleteQuery}
+                    title="Delete Saved Query"
+                    message="Are you sure you want to delete this saved query? This action cannot be undone."
+                    confirmText="Delete"
+                    cancelText="Cancel"
+                    confirmButtonClass="bg-red-600 hover:bg-red-700"
+                />
             </div>
         </div>
     );

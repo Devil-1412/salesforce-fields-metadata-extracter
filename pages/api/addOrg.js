@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jsforce from "jsforce";
+import { encryptCredential } from "@/lib/vaultEncryption";
 
 export default async function handler(req, res) {
     if (req.method !== "POST")
@@ -14,7 +15,7 @@ export default async function handler(req, res) {
                 .json({ success: false, error: "Missing required fields" });
         }
 
-        // Initialize Supabase client
+        // Initialize Supabase client with service role (needed for Vault)
         const supabase = createClient(
             process.env.SUPABASE_URL,
             process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -49,10 +50,16 @@ export default async function handler(req, res) {
 
         // Attempt to connect to Salesforce to verify credentials
         let instanceUrl = null;
+        let orgName = null;
         try {
             const conn = new jsforce.Connection({ loginUrl });
             await conn.login(orgEmail, orgPassword + securityToken);
-            instanceUrl = conn.instanceUrl; // Get instance URL if successful
+            instanceUrl = conn.instanceUrl;
+            
+            // Get org details
+            const identity = await conn.identity();
+            orgName = identity.organization_id; // You can get actual org name if needed
+            
             console.log(`✅ Salesforce connection verified: ${instanceUrl}`);
         } catch (sfError) {
             console.error("❌ Salesforce login failed:", sfError.message);
@@ -62,15 +69,32 @@ export default async function handler(req, res) {
             });
         }
 
-        // Insert verified org into Supabase
+        // 🔐 ENCRYPT CREDENTIALS using Vault
+        console.log('🔐 Encrypting credentials with Supabase Vault...');
+        
+        let passwordSecretId, tokenSecretId;
+        try {
+            passwordSecretId = await encryptCredential(supabase, orgPassword);
+            tokenSecretId = await encryptCredential(supabase, securityToken);
+            console.log('✅ Credentials encrypted successfully');
+        } catch (encryptError) {
+            console.error('❌ Encryption failed:', encryptError);
+            return res.status(500).json({
+                success: false,
+                error: "Failed to encrypt credentials. Please try again.",
+            });
+        }
+
+        // Insert org with encrypted credential IDs
         const { error: insertError } = await supabase.from("organizations").insert([
             {
                 user_id: profile.id,
                 org_email: orgEmail,
-                org_password: orgPassword, // ⚠️ Consider encrypting later
-                security_token: securityToken,
+                org_password_secret_id: passwordSecretId, // ✅ Encrypted UUID
+                security_token_secret_id: tokenSecretId,   // ✅ Encrypted UUID
                 is_sandbox: isSandbox,
-                instance_url: instanceUrl, // ✅ Save verified instance
+                instance_url: instanceUrl,
+                org_name: orgName,
             },
         ]);
 
@@ -81,6 +105,8 @@ export default async function handler(req, res) {
                 error: "Failed to save organization in database",
             });
         }
+
+        console.log('✅ Organization added with encrypted credentials');
 
         return res.status(201).json({
             success: true,
