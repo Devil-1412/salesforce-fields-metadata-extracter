@@ -38,8 +38,8 @@ export default async function handler(req, res) {
 
     // 🔐 Fetch organizations with DECRYPTED credentials using Vault view
     const { data: orgs, error: orgError } = await supabase
-      .from("organizations_decrypted") // Using decrypted view
-      .select("id, org_email, org_password, security_token, is_sandbox, instance_url, org_name")
+      .from("organizations") // Using decrypted view
+      .select("id, org_email, org_password, security_token, is_sandbox, instance_url")
       .eq("user_id", profile.id);
 
     if (orgError) {

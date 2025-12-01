@@ -1,7 +1,6 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
   "/page": "app/page.js",
-  "/compare/page": "app/compare/page.js",
   "/login/page": "app/login/page.js",
-  "/metadata/page": "app/metadata/page.js",
-  "/soql/page": "app/soql/page.js"
+  "/objectAnalysis/page": "app/objectAnalysis/page.js"
 }
