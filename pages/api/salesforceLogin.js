@@ -1,7 +1,9 @@
 import jsforce from "jsforce";
 import { createClient } from "@supabase/supabase-js";
+import { decrypt } from "../../lib/encryption";
+import { jsforceRateLimiter } from "../../lib/rateLimiter";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
@@ -36,10 +38,10 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: "User profile not found" });
     }
 
-    // 🔐 Fetch organizations with DECRYPTED credentials using Vault view
+    // 🔐 Fetch organizations with encrypted credentials
     const { data: orgs, error: orgError } = await supabase
-      .from("organizations") // Using decrypted view
-      .select("id, org_email, org_password, security_token, is_sandbox, instance_url")
+      .from("organizations")
+      .select("id, org_email, encrypted_org_password, encrypted_security_token, is_sandbox, instance_url")
       .eq("user_id", profile.id);
 
     if (orgError) {
@@ -61,10 +63,13 @@ export default async function handler(req, res) {
         const conn = new jsforce.Connection({ loginUrl });
 
         try {
-          // 🔑 Login using DECRYPTED org credentials
+          // 🔑 Decrypt credentials and login
+          const orgPassword = org.encrypted_org_password ? decrypt(org.encrypted_org_password) : '';
+          const securityToken = org.encrypted_security_token ? decrypt(org.encrypted_security_token) : '';
+          
           await conn.login(
             org.org_email,
-            org.org_password + (org.security_token || "")
+            orgPassword + securityToken
           );
 
           // 🔹 Fetch organization info (org name, id, etc.)
@@ -108,3 +113,5 @@ export default async function handler(req, res) {
     res.status(500).json({ success: false, error: "Server error" });
   }
 }
+
+export default jsforceRateLimiter(handler);

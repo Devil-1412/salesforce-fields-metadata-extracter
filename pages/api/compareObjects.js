@@ -1,6 +1,7 @@
 import jsforce from "jsforce";
+import { jsforceRateLimiter } from "../../lib/rateLimiter";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).send("Method not allowed");
 
   try {
@@ -55,3 +56,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
+
+export default jsforceRateLimiter(handler);

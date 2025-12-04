@@ -14,18 +14,24 @@ export default function ComparePage() {
     () => orgs.filter((org) => org.accessToken && org.instanceUrl),
     [orgs]
   );
+  const [sessionToken, setSessionToken] = useState("");
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      setSessionToken(token);
+    }
+  }, []);
 
   // Load available orgs from API
   useEffect(() => {
     const fetchOrgs = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+      if (!sessionToken) return;
       try {
         const res = await fetch("/api/salesforceLogin", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            "Authorization": `Bearer ${sessionToken}`
           },
           body: JSON.stringify({}),
         });
@@ -63,7 +69,10 @@ export default function ComparePage() {
       try {
         const res = await fetch("/api/objects", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
           body: JSON.stringify({ accessToken: org.accessToken, instanceUrl: org.instanceUrl })
         });
         const data = await res.json();
@@ -235,8 +244,8 @@ export default function ComparePage() {
                   {availableOrgs.map((o, idx) => (
                     <option key={idx} value={o.instanceUrl}>
                       {o.orgName !== "None"
-                        ? `${o.orgName} || (${o.instanceUrl.replace("https://", "")})`
-                        : o.instanceUrl.replace("https://", "")}
+                        ? `${o.orgName}`
+                        : "Salesforce Org"}
                     </option>
                   ))}
                 </select>

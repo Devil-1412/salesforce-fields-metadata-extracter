@@ -126,7 +126,24 @@ export default function Navbar() {
             setActiveDropdown(null);
         }
     };
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        const token = localStorage.getItem("token");
+        
+        // Call logout API to clean up session
+        if (token) {
+            try {
+                await fetch("/api/logout", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                });
+            } catch (error) {
+                console.error("Logout API error:", error);
+                // Continue with logout even if API call fails
+            }
+        }
+        
         localStorage.clear();
         router.push("/");
         window.location.reload();

@@ -1,7 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import jsforce from "jsforce";
+import { decrypt } from "../../lib/encryption";
+import { jsforceRateLimiter } from "../../lib/rateLimiter";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== "POST")
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
@@ -35,7 +37,7 @@ export default async function handler(req, res) {
         // Fetch organization linked to user
         const { data: orgs, error: orgError } = await supabase
             .from("organizations")
-            .select("id, org_email, instance_url, is_sandbox, org_password, security_token")
+            .select("id, org_email, instance_url, is_sandbox, encrypted_org_password, encrypted_security_token")
             .eq("user_id", profile.id);
 
         if (orgError)
@@ -45,13 +47,17 @@ export default async function handler(req, res) {
             (orgs || []).map(async (org) => {
                 let apiUsage = null;
                 try {
-                    if (org.org_email && org.org_password && org.security_token) {
+                    if (org.org_email && org.encrypted_org_password && org.encrypted_security_token) {
+                        // Decrypt credentials
+                        const orgPassword = decrypt(org.encrypted_org_password);
+                        const securityToken = decrypt(org.encrypted_security_token);
+                        
                         const conn = new jsforce.Connection({
                             loginUrl: org.is_sandbox
                                 ? "https://test.salesforce.com"
                                 : "https://login.salesforce.com",
                         });
-                        await conn.login(org.org_email, org.org_password + org.security_token);
+                        await conn.login(org.org_email, orgPassword + securityToken);
                         apiUsage = await conn.request('/services/data/v47.0/limits');
                         apiUsage = {
                             limit: apiUsage.DailyApiRequests.Max,
@@ -83,3 +89,5 @@ export default async function handler(req, res) {
         res.status(500).json({ success: false, error: "Server error" });
     }
 }
+
+export default jsforceRateLimiter(handler);

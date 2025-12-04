@@ -113,13 +113,18 @@ export default function MetadataPage() {
   const [apexClasses, setApexClasses] = useState([]);
   const [workflows, setWorkflows] = useState([]);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
-
+  const [sessionToken, setSessionToken] = useState("");
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      setSessionToken(token);
+    }
+  }, []);
   // Load Orgs on Mount
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
+      if (!sessionToken) {
         // If no token, maybe redirect to login or just show empty
         return;
       }
@@ -127,7 +132,7 @@ export default function MetadataPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Authorization": `Bearer ${sessionToken}`
         },
         body: JSON.stringify({}),
       });
@@ -189,7 +194,10 @@ export default function MetadataPage() {
       try {
         const res = await fetch("/api/objects", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
           body: JSON.stringify({ accessToken: token, instanceUrl }),
         });
         const data = await res.json();
@@ -216,13 +224,15 @@ export default function MetadataPage() {
     const fetchFields = async () => {
       // If we already have fields for this object, don't re-fetch
       if (fieldsData[selectedObject]) return;
-
       setLoadingMetadata(true);
       try {
         // Fetch fields
         const fieldsRes = await fetch("/api/fields", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
           body: JSON.stringify({ accessToken: token, instanceUrl, objects: [selectedObject] }),
         });
         const fieldsPayload = await fieldsRes.json();
@@ -233,7 +243,10 @@ export default function MetadataPage() {
         // Fetch record count
         const countRes = await fetch("/api/getRecordCount", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
           body: JSON.stringify({ accessToken: token, instanceUrl, objectName: selectedObject }),
         });
         const countData = await countRes.json();
@@ -274,7 +287,10 @@ export default function MetadataPage() {
     try {
       const res = await fetch(`/api/objectMetadata`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sessionToken}`
+        },
         body: JSON.stringify({ accessToken: token, instanceUrl, selectedObject, type }),
       });
       const data = await res.json();

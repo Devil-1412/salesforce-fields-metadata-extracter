@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import jsforce from "jsforce";
-import { encryptCredential } from "@/lib/vaultEncryption";
+import { encrypt } from "../../lib/encryption";
+import { jsforceRateLimiter } from "../../lib/rateLimiter";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
     if (req.method !== "POST")
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
@@ -69,13 +70,13 @@ export default async function handler(req, res) {
             });
         }
 
-        // 🔐 ENCRYPT CREDENTIALS using Vault
-        console.log('🔐 Encrypting credentials with Supabase Vault...');
+        // 🔐 ENCRYPT CREDENTIALS using AES-256
+        console.log('🔐 Encrypting credentials with AES-256...');
         
-        let passwordSecretId, tokenSecretId;
+        let encryptedPassword, encryptedToken;
         try {
-            passwordSecretId = await encryptCredential(supabase, orgPassword);
-            tokenSecretId = await encryptCredential(supabase, securityToken);
+            encryptedPassword = encrypt(orgPassword);
+            encryptedToken = encrypt(securityToken);
             console.log('✅ Credentials encrypted successfully');
         } catch (encryptError) {
             console.error('❌ Encryption failed:', encryptError);
@@ -85,16 +86,15 @@ export default async function handler(req, res) {
             });
         }
 
-        // Insert org with encrypted credential IDs
+        // Insert org with encrypted credentials
         const { error: insertError } = await supabase.from("organizations").insert([
             {
                 user_id: profile.id,
                 org_email: orgEmail,
-                org_password_secret_id: passwordSecretId, // ✅ Encrypted UUID
-                security_token_secret_id: tokenSecretId,   // ✅ Encrypted UUID
+                encrypted_org_password: encryptedPassword, // ✅ AES-256 Encrypted
+                encrypted_security_token: encryptedToken,   // ✅ AES-256 Encrypted
                 is_sandbox: isSandbox,
                 instance_url: instanceUrl,
-                org_name: orgName,
             },
         ]);
 
@@ -118,3 +118,5 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: "Server error" });
     }
 }
+
+export default jsforceRateLimiter(handler);

@@ -34,6 +34,13 @@ export default function ObjectAnalysisPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedObject, setSelectedObject] = useState(null);
+  const [sessionToken, setSessionToken] = useState("");
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      setSessionToken(token);
+    }
+  }, []);
 
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
@@ -108,7 +115,10 @@ export default function ObjectAnalysisPage() {
       try {
         const res = await fetch("/api/objects", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
           body: JSON.stringify({ accessToken: token, instanceUrl }),
         });
         const data = await res.json();
@@ -176,7 +186,10 @@ export default function ObjectAnalysisPage() {
       try {
         const res = await fetch("/api/getRecordCount", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
           body: JSON.stringify({ instanceUrl, accessToken: token, objectName }),
         });
         const data = await res.json();
@@ -206,7 +219,10 @@ export default function ObjectAnalysisPage() {
     try {
       const res = await fetch("/api/getObjectDetails", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+        },
         body: JSON.stringify({
           accessToken: token,
           instanceUrl,

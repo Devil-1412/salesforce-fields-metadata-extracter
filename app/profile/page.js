@@ -169,7 +169,24 @@ export default function ProfilePage() {
         fetchSessions();
     }, [router]);
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        const token = localStorage.getItem("token");
+        
+        // Call logout API to clean up session
+        if (token) {
+            try {
+                await fetch("/api/logout", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                    },
+                });
+            } catch (error) {
+                console.error("Logout API error:", error);
+                // Continue with logout even if API call fails
+            }
+        }
+        
         localStorage.clear();
         router.push("/");
         window.location.reload();
@@ -177,10 +194,14 @@ export default function ProfilePage() {
 
     const handleAddOrg = async (e) => {
         e.preventDefault();
+        const token = localStorage.getItem('token');
         try {
             const res = await fetch("/api/addOrg", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     email: user.email,
                     ...orgForm,
@@ -193,7 +214,10 @@ export default function ProfilePage() {
                 // Refresh organizations
                 const profileRes = await fetch("/api/profile", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                     body: JSON.stringify({ email: user.email }),
                 });
                 const profileData = await profileRes.json();
@@ -218,11 +242,14 @@ export default function ProfilePage() {
 
     const handleDeleteOrg = async (orgId) => {
         if (!confirm("Are you sure you want to delete this organization?")) return;
-
+        const token = localStorage.getItem('token');
         try {
             const res = await fetch("/api/deleteOrg", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
                 body: JSON.stringify({
                     email: user.email,
                     orgId: orgId
@@ -235,7 +262,10 @@ export default function ProfilePage() {
                 // Refresh organizations
                 const profileRes = await fetch("/api/profile", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
                     body: JSON.stringify({ email: user.email }),
                 });
                 const profileData = await profileRes.json();

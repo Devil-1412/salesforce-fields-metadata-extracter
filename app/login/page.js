@@ -27,8 +27,9 @@ export default function LoginPage() {
 
             if (data.success) {
                 toast.success("Logged in successfully!");
+                // Store both access token and refresh token for automatic token refresh
                 localStorage.setItem("token", data.session.access_token);
-                // localStorage.setItem("email", email); // Removed email storage
+                localStorage.setItem("refresh_token", data.session.refresh_token);
                 window.dispatchEvent(new Event("loggedIn"));
                 if (data.hasOrganization) {
                     router.push("/");
