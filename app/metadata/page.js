@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import SearchableDropdown from "../components/SearchableDropdown";
+import SearchableDropdown from "@components/SearchableDropdown";
 
 export default function MetadataPage() {
 
@@ -113,26 +113,29 @@ export default function MetadataPage() {
   const [apexClasses, setApexClasses] = useState([]);
   const [workflows, setWorkflows] = useState([]);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
-  const [sessionToken, setSessionToken] = useState("");
+  // Supabase Auth Token - REMOVED for cookie auth
+  // const [sessionToken, setSessionToken] = useState("");
+
+  // Session check handled by middleware/cookies/backend
+  /*
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      setSessionToken(token);
-    }
+    const getSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            setSessionToken(session.access_token);
+        }
+    };
+    getSession();
   }, []);
+  */
   // Load Orgs on Mount
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
     try {
-      if (!sessionToken) {
-        // If no token, maybe redirect to login or just show empty
-        return;
-      }
       const res = await fetch("/api/salesforceLogin", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${sessionToken}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({}),
       });
@@ -195,8 +198,7 @@ export default function MetadataPage() {
         const res = await fetch("/api/objects", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({ accessToken: token, instanceUrl }),
         });
@@ -230,8 +232,7 @@ export default function MetadataPage() {
         const fieldsRes = await fetch("/api/fields", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({ accessToken: token, instanceUrl, objects: [selectedObject] }),
         });
@@ -244,8 +245,7 @@ export default function MetadataPage() {
         const countRes = await fetch("/api/getRecordCount", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({ accessToken: token, instanceUrl, objectName: selectedObject }),
         });
@@ -288,8 +288,7 @@ export default function MetadataPage() {
       const res = await fetch(`/api/objectMetadata`, {
         method: "POST",
         headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${sessionToken}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({ accessToken: token, instanceUrl, selectedObject, type }),
       });

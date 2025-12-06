@@ -10,16 +10,13 @@ export default function PlanPage() {
     const [currentPlan, setCurrentPlan] = useState("Free");
 
     useEffect(() => {
-        const token = localStorage.getItem("token");
-        if (!token) return router.push("/login");
-
         const fetchProfile = async () => {
             try {
+                // Ensure cookies are sent with request
                 const res = await fetch("/api/profile", {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
+                        "Content-Type": "application/json"
                     },
                 });
                 const data = await res.json();

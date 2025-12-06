@@ -61,170 +61,98 @@ export default function ProfilePage() {
         newPassword: "",
         confirmPassword: ""
     });
-    const [showPasswordFields, setShowPasswordFields] = useState({
-        current: false,
-        new: false,
-        confirm: false
-    });
 
     useEffect(() => {
-        const token = localStorage.getItem("token");
-        if (!token) return router.push("/login");
+        // Auth check is now handled by the backend cookie validation
+        // But we might want to check if a cookie *exists* or just let the API call 401 fail.
+        // For better UX, we can check basic presence or just fetch profile immediately.
+        fetchProfile();
+    }, []);
 
-        const fetchProfile = async () => {
-            try {
-                const res = await fetch("/api/profile", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                });
-                const data = await res.json();
-                if (data.success) {
-                    setUser(data.user);
-                    setOrganizations(data.organization);
-                    setProfileForm({ full_name: data.user.full_name || "" });
-                }
-                else {
-                    toast.error(`${data.error || "User not found."}`);
-                }
-            } catch (err) {
-                console.error("Fetch profile error:", err);
-            } finally {
-                setLoading(false);
+    const fetchPreferences = async () => {
+        try {
+            const res = await fetch("/api/userPreferences", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                   // Cookie is sent automatically
+                },
+                body: JSON.stringify({
+                    action: "get"
+                }),
+            });
+            const data = await res.json();
+            if (data.success && data.preferences) {
+                setPreferences(data.preferences);
             }
-        };
+        } catch (err) {
+            console.error("Fetch preferences error:", err);
+        }
+    };
 
-        const fetchPreferences = async () => {
-            try {
-                const res = await fetch("/api/userPreferences", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        action: "get"
-                    }),
-                });
-                const data = await res.json();
-                if (data.success && data.preferences) {
-                    setPreferences(data.preferences);
-                }
-            } catch (err) {
-                console.error("Fetch preferences error:", err);
+    const fetchSessions = async () => {
+        try {
+            const res = await fetch("/api/securitySettings", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "getSessions"
+                }),
+            });
+            const data = await res.json();
+            if (data.success && data.data?.sessions) {
+                setSessions(data.data.sessions);
             }
-        };
+        } catch (err) {
+            console.error("Fetch sessions error:", err);
+        }
+    };
 
-        const fetchSecuritySettings = async () => {
-            try {
-                const res = await fetch("/api/securitySettings", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        action: "getSecuritySettings"
-                    }),
-                });
-                const data = await res.json();
-                if (data.success && data.data) {
-                    setSecuritySettings({
-                        twoFactorEnabled: data.data.two_factor_enabled || false,
-                        profileVisible: data.data.profile_visible ?? true,
-                        dataSharing: data.data.data_sharing ?? false
-                    });
+    const fetchProfile = async () => {
+        try {
+            const res = await fetch("/api/profile", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
                 }
-            } catch (err) {
-                console.error("Fetch security settings error:", err);
+            });
+            const data = await res.json();
+            if (data.success) {
+                setUser(data.user);
+                setOrganizations(data.organization);
+            } else {
+                toast.error("Failed to load profile");
             }
-        };
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to load profile");
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        const fetchSessions = async () => {
-            try {
-                const res = await fetch("/api/securitySettings", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        action: "getSessions"
-                    }),
-                });
-                const data = await res.json();
-                if (data.success && data.data?.sessions) {
-                    setSessions(data.data.sessions);
-                }
-            } catch (err) {
-                console.error("Fetch sessions error:", err);
-            }
-        };
-
+    useEffect(() => {
         fetchProfile();
         fetchPreferences();
-        fetchSecuritySettings();
         fetchSessions();
-    }, [router]);
-
-    const handleLogout = async () => {
-        const token = localStorage.getItem("token");
-        
-        // Call logout API to clean up session
-        if (token) {
-            try {
-                await fetch("/api/logout", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                    },
-                });
-            } catch (error) {
-                console.error("Logout API error:", error);
-                // Continue with logout even if API call fails
-            }
-        }
-        
-        localStorage.clear();
-        router.push("/");
-        window.location.reload();
-    };
+    }, []);
 
     const handleAddOrg = async (e) => {
         e.preventDefault();
-        const token = localStorage.getItem('token');
         try {
             const res = await fetch("/api/addOrg", {
                 method: "POST",
-                headers: { 
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
+                headers: {
+                    "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    email: user.email,
-                    ...orgForm,
-                }),
+                body: JSON.stringify(orgForm),
             });
-
             const data = await res.json();
             if (data.success) {
-                toast.success("Org added successfully.");
-                // Refresh organizations
-                const profileRes = await fetch("/api/profile", {
-                    method: "POST",
-                    headers: { 
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ email: user.email }),
-                });
-                const profileData = await profileRes.json();
-                if (profileData.success) {
-                    setOrganizations(profileData.organization);
-                }
-                // Reset form
+                toast.success("Organization added successfully");
+                fetchProfile();
                 setOrgForm({
                     orgEmail: "",
                     orgPassword: "",
@@ -232,46 +160,29 @@ export default function ProfilePage() {
                     isSandbox: false
                 });
             } else {
-                toast.error(`${data.error || "Org could not be added."}`);
+                toast.error(data.error || "Org could not be added.");
             }
         } catch (err) {
             console.error(err);
-            toast.error("Failed to add organization");
+            toast.error("An error occurred.");
         }
     };
 
     const handleDeleteOrg = async (orgId) => {
         if (!confirm("Are you sure you want to delete this organization?")) return;
-        const token = localStorage.getItem('token');
+
         try {
             const res = await fetch("/api/deleteOrg", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
+                    "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    email: user.email,
-                    orgId: orgId
-                }),
+                body: JSON.stringify({ orgId }),
             });
-
             const data = await res.json();
             if (data.success) {
                 toast.success("Organization deleted successfully");
-                // Refresh organizations
-                const profileRes = await fetch("/api/profile", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ email: user.email }),
-                });
-                const profileData = await profileRes.json();
-                if (profileData.success) {
-                    setOrganizations(profileData.organization);
-                }
+                fetchProfile();
             } else {
                 toast.error(data.error || "Failed to delete organization");
             }
@@ -281,11 +192,30 @@ export default function ProfilePage() {
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut();
+            // Also call API logout if needed, but supabase signOut handles session invalidation
+            // If we have a custom logout API:
+            await fetch("/api/logout", { 
+                method: "POST"
+            });
+            
+            router.push("/login");
+            toast.success("Logged out successfully");
+        } catch (err) {
+            console.error(err);
+            router.push("/login");
+        }
+    };
+
     const handleUpdateProfile = async () => {
         try {
             const res = await fetch("/api/updateProfile", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     email: user.email,
                     full_name: profileForm.full_name
@@ -303,27 +233,18 @@ export default function ProfilePage() {
         } catch (err) {
             console.error(err);
             toast.error("Failed to update profile");
-        }
     };
 
     const handleChangePassword = async (e) => {
         e.preventDefault();
-        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            toast.error("New passwords do not match");
-            return;
-        }
-
         try {
             const res = await fetch("/api/changePassword", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    email: user.email,
-                    currentPassword: passwordForm.currentPassword,
-                    newPassword: passwordForm.newPassword
-                }),
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(passwordForm),
             });
-
             const data = await res.json();
             if (data.success) {
                 toast.success("Password changed successfully");
@@ -341,12 +262,15 @@ export default function ProfilePage() {
             toast.error("Failed to change password");
         }
     };
+    };
 
     const handleToggle2FA = async (enabled) => {
         try {
             const res = await fetch("/api/securitySettings", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     email: user.email,
                     action: "toggle2FA",
@@ -381,7 +305,9 @@ export default function ProfilePage() {
 
             const res = await fetch("/api/securitySettings", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     email: user.email,
                     action: "updatePrivacy",
@@ -411,7 +337,9 @@ export default function ProfilePage() {
         try {
             const res = await fetch("/api/securitySettings", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     email: user.email,
                     action: "revokeAllSessions"
@@ -435,7 +363,9 @@ export default function ProfilePage() {
         try {
             const res = await fetch("/api/userPreferences", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
                     email: user.email,
                     action: "update",

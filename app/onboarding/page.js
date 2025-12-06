@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, CheckCircle, ArrowRight, BookOpen } from 'lucide-react';
 import toast from "react-hot-toast";
+import { supabase } from "../utils/supabase";
 
 export default function OnboardingPage() {
     const router = useRouter();
@@ -19,12 +20,11 @@ export default function OnboardingPage() {
         const securityToken = e.target.securityToken.value;
 
         try {
-            const token = localStorage.getItem("token");
+            // Cookie is sent automatically
             const res = await fetch("/api/addOrg", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
+                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify({ orgEmail, orgPassword, securityToken, isSandbox }),
             });

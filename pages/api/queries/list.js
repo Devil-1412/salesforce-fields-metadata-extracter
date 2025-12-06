@@ -1,12 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
+import { getAuthToken } from "@lib/cookieAuth";
 
 export default async function handler(req, res) {
-    if (req.method !== "GET") {
+    if (req.method !== "POST") {
         return res.status(405).json({ success: false, error: "Method not allowed" });
     }
 
     try {
-        const token = req.headers.authorization?.split(" ")[1];
+        const token = getAuthToken(req);
         if (!token) {
             return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
             throw error;
         }
 
-        res.status(200).json({ success: true, data });
+        res.status(200).json({ success: true, queries: data });
 
     } catch (error) {
         console.error("List queries error:", error);

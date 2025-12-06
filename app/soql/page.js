@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -7,7 +7,6 @@ import Editor from "react-simple-code-editor";
 import { highlight, languages } from "prismjs/components/prism-core";
 import "prismjs/components/prism-sql";
 import ConfirmDialog from "../components/ConfirmDialog";
-// import "prismjs/themes/prism-tomorrow.css"; // Dynamic loading instead
 
 const THEMES = [
     { id: "prism-tomorrow.css", label: "Tomorrow Night" },
@@ -34,29 +33,29 @@ const THEMES = [
     { id: "prism.css", label: "Default" },
 ];
 
-    const SOQL_KEYWORDS = [
-        'SELECT', 'FROM', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING',
-        'LIMIT', 'OFFSET', 'FOR VIEW', 'FOR REFERENCE', 'UPDATE TRACKING', 'UPDATE VIEWSTAT',
-        'AND', 'OR', 'NOT', 'IN', 'NOT IN', 'INCLUDES', 'EXCLUDES', 'LIKE',
-        'ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST',
-        'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
-        'TRUE', 'FALSE', 'NULL',
-        'DATE', 'DATETIME', 'time',
-        'YESTERDAY', 'TODAY', 'TOMORROW',
-        'LAST_WEEK', 'THIS_WEEK', 'NEXT_WEEK',
-        'LAST_MONTH', 'THIS_MONTH', 'NEXT_MONTH',
-        'LAST_90_DAYS', 'NEXT_90_DAYS',
-        'LAST_N_DAYS', 'NEXT_N_DAYS',
-        'N_DAYS_AGO', 'NEXT_N_WEEKS', 'LAST_N_WEEKS',
-        'NEXT_N_MONTHS', 'LAST_N_MONTHS',
-        'NEXT_N_QUARTERS', 'LAST_N_QUARTERS',
-        'NEXT_N_YEARS', 'LAST_N_YEARS',
-        'THIS_QUARTER', 'LAST_QUARTER', 'NEXT_QUARTER',
-        'THIS_YEAR', 'LAST_YEAR', 'NEXT_YEAR',
-        'THIS_FISCAL_QUARTER', 'LAST_FISCAL_QUARTER', 'NEXT_FISCAL_QUARTER',
-        'THIS_FISCAL_YEAR', 'LAST_FISCAL_YEAR', 'NEXT_FISCAL_YEAR',
-        'TYPEOF', 'WITH', 'USING SCOPE'
-    ];
+const SOQL_KEYWORDS = [
+    'SELECT', 'FROM', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING',
+    'LIMIT', 'OFFSET', 'FOR VIEW', 'FOR REFERENCE', 'UPDATE TRACKING', 'UPDATE VIEWSTAT',
+    'AND', 'OR', 'NOT', 'IN', 'NOT IN', 'INCLUDES', 'EXCLUDES', 'LIKE',
+    'ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST',
+    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
+    'TRUE', 'FALSE', 'NULL',
+    'DATE', 'DATETIME', 'time',
+    'YESTERDAY', 'TODAY', 'TOMORROW',
+    'LAST_WEEK', 'THIS_WEEK', 'NEXT_WEEK',
+    'LAST_MONTH', 'THIS_MONTH', 'NEXT_MONTH',
+    'LAST_90_DAYS', 'NEXT_90_DAYS',
+    'LAST_N_DAYS', 'NEXT_N_DAYS',
+    'N_DAYS_AGO', 'NEXT_N_WEEKS', 'LAST_N_WEEKS',
+    'NEXT_N_MONTHS', 'LAST_N_MONTHS',
+    'NEXT_N_QUARTERS', 'LAST_N_QUARTERS',
+    'NEXT_N_YEARS', 'LAST_N_YEARS',
+    'THIS_QUARTER', 'LAST_QUARTER', 'NEXT_QUARTER',
+    'THIS_YEAR', 'LAST_YEAR', 'NEXT_YEAR',
+    'THIS_FISCAL_QUARTER', 'LAST_FISCAL_QUARTER', 'NEXT_FISCAL_QUARTER',
+    'THIS_FISCAL_YEAR', 'LAST_FISCAL_YEAR', 'NEXT_FISCAL_YEAR',
+    'TYPEOF', 'WITH', 'USING SCOPE'
+];
 
 export default function SoqlPage() {
     const router = useRouter();
@@ -66,7 +65,11 @@ export default function SoqlPage() {
     const [selectedOrgId, setSelectedOrgId] = useState("");
     const [selectedOrgMeta, setSelectedOrgMeta] = useState(null);
     const [instanceUrl, setInstanceUrl] = useState("");
-    const [token, setToken] = useState("");
+    // token here refers to Salesforce Access Token
+    const [token, setToken] = useState(""); 
+    
+    // authToken refers to Supabase Session Token - REMOVED for cookie auth
+    // const [authToken, setAuthToken] = useState("");
 
     const [query, setQuery] = useState("SELECT Id, Name, CreatedDate FROM Account LIMIT 10");
     const [results, setResults] = useState(null);
@@ -96,7 +99,7 @@ export default function SoqlPage() {
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [newQueryName, setNewQueryName] = useState("");
     const [savingQuery, setSavingQuery] = useState(false);
-    const [loadingQueries, setLoadingQueries] = useState(false);
+    // const [loadingQueries, setLoadingQueries] = useState(false); // variable unused in original but keep if needed
 
     // Delete Confirmation State
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -108,7 +111,6 @@ export default function SoqlPage() {
     const [showFilterModal, setShowFilterModal] = useState(false);
     const [filterType, setFilterType] = useState('contains');
     const [filterValue, setFilterValue] = useState('');
-
 
 
     useEffect(() => {
@@ -137,36 +139,52 @@ export default function SoqlPage() {
         setIsThemePickerOpen(false);
     };
 
+    // Load Supabase session
+    // Supabase session is handled via cookies now
+    /*
+    useEffect(() => {
+        const getSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                setAuthToken(session.access_token);
+            } else {
+                router.push("/login");
+            }
+        };
+        getSession();
+    }, [router]);
+    */
+
     const loadOrgs = useCallback(async () => {
         setOrgLoading(true);
         setOrgError("");
         try {
-            const token = localStorage.getItem("token");
-            if (!token) throw new Error("Please sign in again to load your organizations.");
             const res = await fetch("/api/salesforceLogin", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
+                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify({}),
             });
             const data = await res.json();
             if (!data.success || !Array.isArray(data.data)) {
+                if (data.error && data.error.includes("expired")) {
+                    throw new Error("Session expired. Please log in again.");
+                }
                 throw new Error(data.error || "Could not fetch organizations.");
             }
             setOrgs(data.data);
         } catch (error) {
             const message = error?.message || "Unable to load organizations.";
             setOrgError(message);
-            toast.error(message);
+            // toast.error(message);
         } finally {
             setOrgLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        loadOrgs();
+            loadOrgs();
     }, [loadOrgs]);
 
     const selectOrg = useCallback(
@@ -217,7 +235,9 @@ export default function SoqlPage() {
         try {
             const res = await fetch("/api/soql", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({ accessToken: token, instanceUrl, query }),
             });
             const data = await res.json();
@@ -455,8 +475,10 @@ export default function SoqlPage() {
         try {
             const res = await fetch('/api/metadata/describe', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accessToken: token, instanceUrl }),
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ accessToken: token, instanceUrl, type: "objects" }),
             });
             const data = await res.json();
             if (data.success) {
@@ -476,8 +498,10 @@ export default function SoqlPage() {
         try {
             const res = await fetch('/api/metadata/describe', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accessToken: token, instanceUrl, objectName }),
+                headers: { 
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ accessToken: token, instanceUrl, type: "fields", objectName }),
             });
             const data = await res.json();
             if (data.success) {
@@ -498,109 +522,97 @@ export default function SoqlPage() {
         }
     }, [instanceUrl, token, fetchObjects]);
 
-    // Fetch saved queries
+    // Saved Queries Logic
     const fetchSavedQueries = useCallback(async () => {
-        const token = localStorage.getItem("token");
-        if (!token) return;
 
-        setLoadingQueries(true);
         try {
-            const res = await fetch('/api/queries/list', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const res = await fetch("/api/queries/list", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
             });
             const data = await res.json();
             if (data.success) {
-                setSavedQueries(data.data);
+                setSavedQueries(data.queries);
             }
         } catch (err) {
-            console.error('Failed to fetch saved queries:', err);
-            toast.error("Failed to load saved queries");
-        } finally {
-            setLoadingQueries(false);
+            console.error("Error fetching saved queries:", err);
         }
     }, []);
 
-    // Load saved queries on mount
     useEffect(() => {
         fetchSavedQueries();
     }, [fetchSavedQueries]);
 
-    // Save Query Handler
     const handleSaveQuery = async () => {
         if (!newQueryName.trim()) {
-            toast.error("Please enter a name for the query");
-            return;
-        }
-
-        const token = localStorage.getItem("token");
-        if (!token) {
-            toast.error("Please sign in to save queries");
-            return;
+             if(!Boolean(newQueryName.trim())) toast.error("Please enter a name for the query");
+             return;
         }
 
         setSavingQuery(true);
         try {
-            const res = await fetch('/api/queries/save', {
-                method: 'POST',
+            const res = await fetch("/api/queries/save", {
+                method: "POST",
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
                     name: newQueryName,
                     query: query
-                })
+                }),
             });
             const data = await res.json();
-            
-            if (data.success) {
-                toast.success("Query saved successfully");
-                setIsSaveModalOpen(false);
-                setNewQueryName("");
-                fetchSavedQueries();
+            if(data.success) {
+                 toast.success("Query saved successfully");
+                 setIsSaveModalOpen(false);
+                 setNewQueryName("");
+                 fetchSavedQueries();
             } else {
-                throw new Error(data.error);
+                 toast.error(data.error || "Failed to save query");
             }
         } catch (err) {
-            toast.error(err.message || "Failed to save query");
+             console.error(err);
+             toast.error("Failed to save query");
         } finally {
-            setSavingQuery(false);
+             setSavingQuery(false);
         }
     };
 
-    // Delete Query Handler
     const handleDeleteQuery = async (id, e) => {
         e.stopPropagation();
-        setQueryToDelete(id);
+        setQueryToDelete(savedQueries.find(q => q.id === id));
         setShowDeleteConfirm(true);
     };
 
-    // Confirm Delete Query
     const confirmDeleteQuery = async () => {
         if (!queryToDelete) return;
 
-        const token = localStorage.getItem("token");
         try {
-            const res = await fetch(`/api/queries/delete?id=${queryToDelete}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+            const res = await fetch("/api/queries/delete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ id: queryToDelete.id }),
             });
             const data = await res.json();
-            
-            if (data.success) {
-                toast.success("Query deleted");
-                fetchSavedQueries();
+            if(data.success) {
+                 toast.success("Query deleted successfully");
+                 fetchSavedQueries();
             } else {
-                throw new Error(data.error);
+                 toast.error(data.error || "Failed to delete query");
             }
-        } catch (err) {
-            toast.error(err.message || "Failed to delete query");
+        } catch(err) {
+             console.error(err);
+             toast.error("Failed to delete query");
         } finally {
-            setQueryToDelete(null);
+             setShowDeleteConfirm(false);
+             setQueryToDelete(null);
         }
     };
 
-    // Load a saved query
     const loadSavedQuery = (savedQuery) => {
         setQuery(savedQuery.query);
         toast.success(`Loaded query: ${savedQuery.name}`);
@@ -780,21 +792,6 @@ export default function SoqlPage() {
 
     // Update suggestions when query or cursor changes (debounced slightly or on effect)
     useEffect(() => {
-        // We need cursor position from the editor. 
-        // Since react-simple-code-editor doesn't give cursor pos in onValueChange easily,
-        // we might need to track it or just use the end of the string if we can't get it.
-        // However, for a better experience, we really need the cursor position.
-        // We can capture it from the selection event on the textarea.
-        
-        // For now, we will use a simple approach: 
-        // If the user is typing, we assume the cursor is at the end of the changed part? 
-        // No, that's hard.
-        // Let's rely on the textarea's selectionStart if we can get a ref, 
-        // but Editor doesn't expose the textarea ref easily.
-        // WORKAROUND: We will assume the cursor is at the end of the query for now, 
-        // OR we can try to find the active word by looking at the diff?
-        // Actually, let's try to get the cursor position from the DOM active element if it's the textarea.
-        
         const textarea = document.querySelector('textarea.npm__react-simple-code-editor__textarea');
         if (textarea) {
              const pos = textarea.selectionStart;
@@ -814,7 +811,6 @@ export default function SoqlPage() {
         }
     }, [query, getSuggestions]);
 
-
     // Apply selected suggestion
     const applySuggestion = (suggestion) => {
         const suggestionText = typeof suggestion === 'string' ? suggestion : suggestion.text;
@@ -822,22 +818,15 @@ export default function SoqlPage() {
         // We need to replace the "active word" with the suggestion
         const { activeWord } = getQueryContext(query, cursorPosition);
         
-        // Calculate start and end of the active word
-        // We can do this by searching backwards and forwards from cursor
-        // But getQueryContext already did some tokenizing. 
-        // Let's just do a simple replacement relative to cursor.
-        
         const beforeCursor = query.substring(0, cursorPosition);
         const afterCursor = query.substring(cursorPosition);
         
         // If we are in the middle of a word, remove the whole word
-        // Find word boundary before
         let start = cursorPosition;
         while (start > 0 && /[a-zA-Z0-9_]/.test(query[start - 1])) {
             start--;
         }
         
-        // Find word boundary after
         let end = cursorPosition;
         while (end < query.length && /[a-zA-Z0-9_]/.test(query[end])) {
             end++;
@@ -848,13 +837,6 @@ export default function SoqlPage() {
         
         setQuery(newQuery);
         setShowSuggestions(false);
-        
-        // Move cursor to end of inserted word + space
-        // We need to wait for render to set cursor? 
-        // React state update is async. 
-        // The Editor component might reset cursor. 
-        // This is a known issue with controlled inputs.
-        // We'll let the user type for now.
     };
 
     // Global key listener for suggestions
@@ -889,6 +871,7 @@ export default function SoqlPage() {
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
     }, [showSuggestions, suggestions, selectedSuggestionIndex, applySuggestion]);
+
 
     return (
         <div className="min-h-screen bg-slate-50 py-6 px-3 sm:px-3 relative">

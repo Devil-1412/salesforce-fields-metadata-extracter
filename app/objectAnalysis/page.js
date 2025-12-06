@@ -25,7 +25,7 @@ export default function ObjectAnalysisPage() {
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [selectedOrgMeta, setSelectedOrgMeta] = useState(null);
   const [instanceUrl, setInstanceUrl] = useState("");
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(""); // Salesforce Access Token
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
@@ -34,25 +34,32 @@ export default function ObjectAnalysisPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedObject, setSelectedObject] = useState(null);
-  const [sessionToken, setSessionToken] = useState("");
+  // Supabase Auth Token - REMOVED for cookie auth
+  // const [sessionToken, setSessionToken] = useState(""); 
+
+  // Session check handled by middleware/cookies/backend
+  /*
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      setSessionToken(token);
-    }
-  }, []);
+    const getSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            setSessionToken(session.access_token);
+        } else {
+            router.push("/login");
+        }
+    };
+    getSession();
+  }, [router]);
+  */
 
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
     setOrgError("");
     try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Please sign in again to load your organizations.");
       const res = await fetch("/api/salesforceLogin", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({}),
       });
@@ -116,8 +123,7 @@ export default function ObjectAnalysisPage() {
         const res = await fetch("/api/objects", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({ accessToken: token, instanceUrl }),
         });
@@ -187,8 +193,7 @@ export default function ObjectAnalysisPage() {
         const res = await fetch("/api/getRecordCount", {
           method: "POST",
           headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({ instanceUrl, accessToken: token, objectName }),
         });
@@ -220,8 +225,7 @@ export default function ObjectAnalysisPage() {
       const res = await fetch("/api/getObjectDetails", {
         method: "POST",
         headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
         },
         body: JSON.stringify({
           accessToken: token,

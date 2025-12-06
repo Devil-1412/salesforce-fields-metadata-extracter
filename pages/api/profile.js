@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import jsforce from "jsforce";
 import { decrypt } from "../../lib/encryption";
+import { getAuthToken } from "../../lib/cookieAuth";
 import { jsforceRateLimiter } from "../../lib/rateLimiter";
 
 async function handler(req, res) {
@@ -8,7 +9,7 @@ async function handler(req, res) {
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
     try {
-        const token = req.headers.authorization?.split(" ")[1];
+        const token = getAuthToken(req);
         if (!token)
             return res.status(401).json({ success: false, error: "Missing authentication token" });
 

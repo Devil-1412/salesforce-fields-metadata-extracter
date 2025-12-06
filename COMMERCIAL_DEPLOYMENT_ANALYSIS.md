@@ -8,7 +8,7 @@
 
 ## 1. 🔴 CRITICAL SECURITY VULNERABILITIES
 
-### 1.1 Credential Storage in Database
+### 1.1 Credential Storage in Database (✅ COMPLETED)
 
 **Issue**: Salesforce passwords and security tokens are stored in plaintext in the `organizations` table.
 
@@ -25,7 +25,7 @@ security_token VARCHAR(255)
   - Store encrypted keys separately
   - Consider OAuth flow instead of password storage
 
-### 1.2 No Rate Limiting
+### 1.2 No Rate Limiting (✅ COMPLETED)
 
 **Issue**: No rate limiting on any API endpoints
 
@@ -37,7 +37,7 @@ security_token VARCHAR(255)
   - Use middleware like `express-rate-limit`
   - Monitor and alert on unusual patterns
 
-### 1.3 SQL Injection via SOQL
+### 1.3 SQL Injection via SOQL (⚠️ CHECK LATER)
 
 **Issue**: User-provided SOQL queries executed without sanitization
 
@@ -53,7 +53,7 @@ const results = await conn.query(query); // DANGEROUS
   - Limit queryable objects
   - Add query complexity limits
 
-### 1.4 Missing CSRF Protection
+### 1.4 Missing CSRF Protection (⚠️ CHECK LATER)
 
 **Issue**: No CSRF tokens on state-changing operations
 

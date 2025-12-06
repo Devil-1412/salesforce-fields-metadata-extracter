@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import { LayoutGrid, Columns } from "lucide-react";
-import SearchableDropdown from "../components/SearchableDropdown";
+import SearchableDropdown from "@components/SearchableDropdown";
 
 export default function CompareFields() {
   // Removed orgSelectedObjects and orgSelectionDrafts
@@ -29,13 +29,21 @@ export default function CompareFields() {
     () => orgs.filter((org) => org.accessToken && org.instanceUrl),
     [orgs]
   );
-  const [sessionToken, setSessionToken] = useState("");
+  // Supabase Auth Token - REMOVED for cookie auth
+  // const [sessionToken, setSessionToken] = useState("");
+
+  // Session check handled by middleware/cookies/backend
+  /*
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      setSessionToken(token);
-    }
+    const getSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            setSessionToken(session.access_token);
+        }
+    };
+    getSession();
   }, []);
+  */
 
   const orgObjectsToLoad = useMemo(() => {
     const map = {};
@@ -100,8 +108,7 @@ export default function CompareFields() {
             const res = await fetch("/api/objects", {
               method: "POST",
               headers: { 
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${sessionToken}`
+                "Content-Type": "application/json"
               },
               body: JSON.stringify({
                 accessToken: org.accessToken,
@@ -242,14 +249,11 @@ export default function CompareFields() {
   // Load available orgs from API
   useEffect(() => {
     const fetchOrgs = async () => {
-      if (!sessionToken) return;
-
       try {
         const res = await fetch("/api/salesforceLogin", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${sessionToken}`
+            "Content-Type": "application/json"
           },
           body: JSON.stringify({}),
         });
@@ -312,8 +316,7 @@ export default function CompareFields() {
             const res = await fetch("/api/fields", {
               method: "POST",
               headers: { 
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${sessionToken}`
+                "Content-Type": "application/json"
               },
               body: JSON.stringify({
                 accessToken: org.accessToken,

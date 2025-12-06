@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { setAuthCookie } from "../../lib/cookieAuth";
 
 // Helper function to extract IP address from request
 function getClientIp(req) {
@@ -118,6 +119,9 @@ export default async function handler(req, res) {
             console.error("Error checking organizations:", orgError);
         }
 
+        // Set httpOnly cookie
+        setAuthCookie(res, data.session.access_token);
+
         return res.status(200).json({
             success: true,
             message: "Login successful.",
@@ -125,7 +129,7 @@ export default async function handler(req, res) {
                 id: data.user?.id,
                 email: data.user?.email,
             },
-            session: data.session,
+            // Token removed from response body for security
             hasOrganization: count > 0,
         });
     } catch (err) {

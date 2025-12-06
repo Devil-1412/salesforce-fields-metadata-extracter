@@ -27,21 +27,26 @@ export default function LoginPage() {
 
             if (data.success) {
                 toast.success("Logged in successfully!");
-                // Store both access token and refresh token for automatic token refresh
-                localStorage.setItem("token", data.session.access_token);
-                localStorage.setItem("refresh_token", data.session.refresh_token);
+                // Token is now set in httpOnly cookie
                 window.dispatchEvent(new Event("loggedIn"));
+                
                 if (data.hasOrganization) {
                     router.push("/");
                 } else {
                     router.push("/onboarding");
                 }
+                
+                // Force reload to update Navbar state to reflect new cookie
+                // Use setTimeout to allow router.push to potentially start
+                setTimeout(() => {
+                     window.location.href = data.hasOrganization ? "/" : "/onboarding";
+                }, 100);
             } else {
                 toast.error(`${data.error || "Login failed. Please Try again."}`);
             }
         } catch (error) {
-            console.error("Signup error:", error);
-            alert("Login failed. Please Try again.");
+            console.error("Login error:", error);
+            toast.error("Login failed. Please Try again.");
         } finally {
             setLoading(false);
         }

@@ -103,8 +103,7 @@ export default async function handler(req, res) {
                 email,
                 password,
                 options: {
-                    data: { fullName },
-                    emailRedirectTo: 'http://localhost:3000/', // 👈 required for email link
+                    data: { fullName }, 
                 },
             }
         );

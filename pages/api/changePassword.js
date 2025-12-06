@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getAuthToken } from "../../lib/cookieAuth";
 
 export default async function handler(req, res) {
     if (req.method !== "POST")
@@ -14,9 +15,9 @@ export default async function handler(req, res) {
             });
         }
 
-        const token = req.headers.authorization?.split(" ")[1];
+        const token = getAuthToken(req);
         if (!token) {
-            return res.status(401).json({ success: false, error: "Missing authentication token" });
+            return res.status(401).json({ success: false, error: "Missing or invalid authorization token" });
         }
 
         // Validate new password strength
@@ -87,4 +88,3 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: "Server error" });
     }
 }
-

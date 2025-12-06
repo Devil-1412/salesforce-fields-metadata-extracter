@@ -2,6 +2,7 @@ import jsforce from "jsforce";
 import { createClient } from "@supabase/supabase-js";
 import { decrypt } from "../../lib/encryption";
 import { jsforceRateLimiter } from "../../lib/rateLimiter";
+import { getAuthToken } from "../../lib/cookieAuth";
 
 async function handler(req, res) {
   if (req.method !== "POST") {
@@ -9,7 +10,7 @@ async function handler(req, res) {
   }
 
   try {
-    const token = req.headers.authorization?.split(" ")[1];
+    const token = getAuthToken(req);
     if (!token) {
       return res.status(401).json({ success: false, error: "Missing authentication token" });
     }

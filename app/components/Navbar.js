@@ -21,36 +21,51 @@ export default function Navbar() {
     const profileRef = useRef(null);
 
     const fetchProfile = async () => {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-
         try {
+            // Note: Token is now in httpOnly cookie, so we don't send Authorization header
             const res = await fetch("/api/profile", {
                 method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                },
             });
             const data = await res.json();
             if (data.success) {
+                setIsLoggedIn(true);
                 setUserEmail(data.user.email);
                 setFullName(data.user.full_name);
+            } else {
+                setIsLoggedIn(false);
             }
         } catch (error) {
             console.error("Failed to fetch profile:", error);
+            setIsLoggedIn(false);
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await fetch("/api/logout", {
+                method: "POST",
+            });
+        } catch (error) {
+            console.error("Logout API error:", error);
+        }
+        
+        setIsLoggedIn(false);
+        setUserEmail("");
+        setFullName("");
+        router.push("/");
+        // Clean up any potential localStorage leftovers just in case, though we migrated
+        if (typeof window !== "undefined") {
+            localStorage.removeItem("token");
+            localStorage.removeItem("refresh_token");
+        }
+        window.location.reload();
+    };
+
     useEffect(() => {
-        // listen for changes from other tabs
-        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        setIsLoggedIn(!!token);
-        if (token) fetchProfile();
+        fetchProfile();
 
         const handleLoggedIn = (e) => {
-            const token = localStorage.getItem("token");
-            setIsLoggedIn(!!token);
-            if (token) fetchProfile();
+           fetchProfile();
         };
         window.addEventListener("loggedIn", handleLoggedIn);
 
@@ -125,28 +140,6 @@ export default function Navbar() {
         if (!e.target.closest(".dropdown-container")) {
             setActiveDropdown(null);
         }
-    };
-    const handleLogout = async () => {
-        const token = localStorage.getItem("token");
-        
-        // Call logout API to clean up session
-        if (token) {
-            try {
-                await fetch("/api/logout", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${token}`,
-                    },
-                });
-            } catch (error) {
-                console.error("Logout API error:", error);
-                // Continue with logout even if API call fails
-            }
-        }
-        
-        localStorage.clear();
-        router.push("/");
-        window.location.reload();
     };
 
     useEffect(() => {
