@@ -34,16 +34,15 @@ export default function ComparePage() {
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
-        const res = await fetch("/api/salesforceLogin", {
+        const res = await fetch("/api/listAllOrgs", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
-          },
-          body: JSON.stringify({}),
+          }
         });
         const data = await res.json();
         if (data.success) {
-          setAvailableOrgs(data.data);
+          setAvailableOrgs(data.organizations);
         }
       } catch (err) {
         console.error("Error fetching orgs:", err);
@@ -232,13 +231,39 @@ export default function ComparePage() {
                 </div>
                 <select
                   value={org.instanceUrl || ""}
-                  onChange={(e) => {
-                    const selectedOrg = availableOrgs.find((o) => o.instanceUrl === e.target.value);
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    const selectedOrg = availableOrgs.find((o) => (o.instance_url || o.instanceUrl) === val);
                     if (selectedOrg) {
-                      updateOrg(index, selectedOrg);
-                      toast.success(
-                        `Switched to ${selectedOrg.orgName !== "None" ? selectedOrg.orgName : `Org ${index + 1}`}`
-                      );
+                        const targetInstanceUrl = selectedOrg.instance_url || selectedOrg.instanceUrl;
+                        const toastId = toast.loading(`Logging in to ${selectedOrg.org_name || "Salesforce"}...`);
+                        try {
+                            const res = await fetch("/api/salesforceLogin", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                updateOrg(index, {
+                                    ...selectedOrg,
+                                    accessToken: data.accessToken,
+                                    instanceUrl: targetInstanceUrl,
+                                    orgName: data.orgName
+                                });
+                                toast.success(
+                                    `Switched to ${data.orgName !== "None" ? data.orgName : `Org ${index + 1}`}`,
+                                    { id: toastId }
+                                );
+                            } else {
+                                toast.error(data.error || "Login failed", { id: toastId });
+                            }
+                        } catch(err) {
+                            console.error(err);
+                            toast.error("Login failed", { id: toastId });
+                        }
                     }
                   }}
                   className="w-full bg-white text-gray-700 rounded-lg px-3 py-2 border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-400 transition-all cursor-pointer shadow-sm"
@@ -247,9 +272,9 @@ export default function ComparePage() {
                     Select an Org
                   </option>
                   {availableOrgs.map((o, idx) => (
-                    <option key={idx} value={o.instanceUrl}>
-                      {o.orgName !== "None"
-                        ? `${o.orgName}`
+                    <option key={idx} value={o.instance_url || o.instanceUrl}>
+                      {(o.org_name || o.orgName) && (o.org_name !== "None" && o.orgName !== "None")
+                        ? (o.org_name || o.orgName)
                         : "Salesforce Org"}
                     </option>
                   ))}

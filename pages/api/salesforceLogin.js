@@ -1,13 +1,20 @@
 import jsforce from "jsforce";
-import { createClient } from "@supabase/supabase-js";
-import { decrypt } from "../../lib/encryption";
-import { jsforceRateLimiter } from "../../lib/rateLimiter";
-import { getAuthToken } from "../../lib/cookieAuth";
+import { getServiceRoleClient } from "@lib/supabaseClient";
+import { decrypt } from "@lib/encryption";
+import { jsforceRateLimiter } from "@lib/rateLimiter";
+import { getAuthToken } from "@lib/cookieAuth";
+import { handleApiError, logError } from "@lib/errorHandler";
+import { validateContentType } from "@lib/contentTypeValidator";
 
 async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
+
+  // Validate Content-Type
+    if (!validateContentType(req, res)) {
+        return;
+    }
 
   try {
     const token = getAuthToken(req);
@@ -15,11 +22,13 @@ async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Missing authentication token" });
     }
 
+    const { instanceUrl } = req.body;
+    if (!instanceUrl) {
+        return res.status(400).json({ success: false, error: "Missing instanceUrl" });
+    }
+
     // 🔹 Initialize Supabase client
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabase = getServiceRoleClient();
 
     // 🔹 Verify user token
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
@@ -28,90 +37,54 @@ async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Invalid token" });
     }
 
-    // 🔹 Fetch the user's profile using the user ID from the token
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
+    // 🔐 Fetch specific organization with encrypted credentials
+    const { data: org, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, org_email, org_name, encrypted_org_password, encrypted_security_token, is_sandbox, instance_url")
+      .eq("user_id", user.id)
+      .eq("instance_url", instanceUrl)
       .single();
 
-    if (profileError || !profile) {
-      return res.status(404).json({ success: false, error: "User profile not found" });
+    if (orgError || !org) {
+      console.error("Supabase fetch error or org not found:", orgError);
+      return res.status(404).json({ success: false, error: "Organization not found" });
     }
 
-    // 🔐 Fetch organizations with encrypted credentials
-    const { data: orgs, error: orgError } = await supabase
-      .from("organizations")
-      .select("id, org_email, encrypted_org_password, encrypted_security_token, is_sandbox, instance_url")
-      .eq("user_id", profile.id);
+    // 🔹 Login to the specific org
+    const loginUrl = org.is_sandbox
+        ? "https://test.salesforce.com"
+        : "https://login.salesforce.com";
 
-    if (orgError) {
-      console.error("Supabase fetch error:", orgError);
-      return res.status(500).json({ success: false, error: "Error fetching orgs" });
-    }
+    const conn = new jsforce.Connection({ loginUrl });
 
-    if (!orgs || orgs.length === 0) {
-      return res.status(200).json({ success: false, error: "No org present" });
-    }
-
-    // 🔹 Login to all  orgs concurrently and fetch org details
-    const results = await Promise.all(
-      orgs.map(async (org) => {
-        const loginUrl = org.is_sandbox
-          ? "https://test.salesforce.com"
-          : "https://login.salesforce.com";
-
-        const conn = new jsforce.Connection({ loginUrl });
-
-        try {
-          // 🔑 Decrypt credentials and login
-          const orgPassword = org.encrypted_org_password ? decrypt(org.encrypted_org_password) : '';
-          const securityToken = org.encrypted_security_token ? decrypt(org.encrypted_security_token) : '';
-          
-          await conn.login(
+    try {
+        // 🔑 Decrypt credentials and login
+        const orgPassword = org.encrypted_org_password ? decrypt(org.encrypted_org_password) : '';
+        const securityToken = org.encrypted_security_token ? decrypt(org.encrypted_security_token) : '';
+        
+        await conn.login(
             org.org_email,
             orgPassword + securityToken
-          );
+        );
 
-          // 🔹 Fetch organization info (org name, id, etc.)
-          let orgName = "Unknown Org";
-          try {
-            const orgInfo = await conn.query("SELECT Name FROM Organization LIMIT 1");
-            if (orgInfo.records?.length > 0) {
-              orgName = orgInfo.records[0].Name;
-            }
-          } catch (orgErr) {
-            console.warn(`⚠️ Could not fetch org name for ${org.org_email}:`, orgErr.message);
-          }
-
-          // ✅ Return only minimal info
-          return {
+        // ✅ Return access token and instance URL for this org
+        res.status(200).json({
+            success: true,
             accessToken: conn.accessToken,
             instanceUrl: conn.instanceUrl,
-            orgName,
-            success: true,
-          };
-        } catch (loginErr) {
-          console.error(
-            `❌ Login failed for ${org.org_email}: ${loginErr.message}`
-          );
-          return {
-            success: false,
-            error: loginErr.message || "Login failed",
-          };
-        }
-      })
-    );
+            orgName: org.org_name || "Unknown Org",
+        });
 
-    // ✅ Return access tokens and instance URLs for all orgs
-    res.status(200).json({
-      success: true,
-      data: results.filter((r) => r.success), // only successful logins
-      failed: results.filter((r) => !r.success), // optional
-    });
+    } catch (loginErr) {
+        logError(loginErr, req, 'salesforceLogin-login');
+        return res.status(401).json({
+            success: false,
+            error: "Login failed for this organization. Please add this organisation again in user profile.",
+        });
+    }
+
   } catch (err) {
-    console.error("Salesforce login error:", err);
-    res.status(500).json({ success: false, error: "Server error" });
+    handleApiError(err, req, res, 'salesforceLogin');
   }
 }
 

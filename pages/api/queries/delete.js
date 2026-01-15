@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { getAuthToken } from "@lib/cookieAuth";
+import { uuidSchema } from "@lib/validation/schemas";
+import { handleApiError } from "@lib/errorHandler";
 
 export default async function handler(req, res) {
     if (req.method !== "DELETE") {
@@ -14,8 +16,13 @@ export default async function handler(req, res) {
 
         const { id } = req.query;
 
-        if (!id) {
-            return res.status(400).json({ success: false, error: "Query ID is required" });
+        // Validate UUID format
+        const validationResult = uuidSchema.safeParse(id);
+        if (!validationResult.success) {
+            return res.status(400).json({ 
+                success: false, 
+                error: "Invalid query ID format"
+            });
         }
 
         const supabase = createClient(
@@ -45,7 +52,6 @@ export default async function handler(req, res) {
         res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error("Delete query error:", error);
-        res.status(500).json({ success: false, error: error.message || "Failed to delete query" });
+        return handleApiError(error, req, res, 'queries-delete');
     }
 }

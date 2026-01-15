@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-import { clearAuthCookie, getAuthToken } from "../../lib/cookieAuth";
+import { getServiceRoleClient } from "@lib/supabaseClient";
+import { clearAuthCookies, getAuthToken } from "@lib/cookieAuth";
 
 export default async function handler(req, res) {
     if (req.method !== "POST") {
@@ -14,27 +14,15 @@ export default async function handler(req, res) {
             return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
-        const SUPABASE_URL = process.env.SUPABASE_URL;
-        const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-        if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-            console.error("Missing Supabase credentials in environment variables.");
-            return res.status(500).json({ success: false, error: "Server misconfiguration." });
-        }
-
-        // Create Supabase client
-        const supabase = createClient(
-            SUPABASE_URL,
-            SUPABASE_SERVICE_ROLE_KEY,
-            { auth: { persistSession: false } }
-        );
+        // Use singleton Supabase client (connection pooling)
+        const supabase = getServiceRoleClient();
 
         // Get user from token to verify it's a valid session
         const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
         if (userError || !user) {
-            // If token is invalid or user not found, still clear the cookie
-            clearAuthCookie(res);
+            // If token is invalid or user not found, still clear the cookies
+            clearAuthCookies(res);
             return res.status(401).json({ success: false, error: "Invalid token" });
         }
 
@@ -58,8 +46,8 @@ export default async function handler(req, res) {
             console.error("Error signing out from Supabase Auth:", signOutError);
         }
 
-        // Clear the cookie
-        clearAuthCookie(res);
+        // Clear both access and refresh token cookies
+        clearAuthCookies(res);
 
         return res.status(200).json({
             success: true,

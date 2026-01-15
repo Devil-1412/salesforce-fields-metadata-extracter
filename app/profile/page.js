@@ -28,8 +28,11 @@ import {
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
+import { useAuth } from "../context/authContext";
+
 export default function ProfilePage() {
     const router = useRouter();
+    const { user: authUser, refreshUser } = useAuth();
     const [activeTab, setActiveTab] = useState("profile");
     const [user, setUser] = useState({});
     const [organizations, setOrganizations] = useState(null);
@@ -63,11 +66,11 @@ export default function ProfilePage() {
     });
 
     useEffect(() => {
-        // Auth check is now handled by the backend cookie validation
-        // But we might want to check if a cookie *exists* or just let the API call 401 fail.
-        // For better UX, we can check basic presence or just fetch profile immediately.
-        fetchProfile();
-    }, []);
+        if (authUser) {
+           setUser(authUser);
+           setLoading(false);
+        }
+    }, [authUser]);
 
     const fetchPreferences = async () => {
         try {
@@ -110,9 +113,10 @@ export default function ProfilePage() {
         }
     };
 
-    const fetchProfile = async () => {
+
+    const fetchOrgs = async () => {
         try {
-            const res = await fetch("/api/profile", {
+            const res = await fetch("/api/listAllOrgs", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -120,21 +124,16 @@ export default function ProfilePage() {
             });
             const data = await res.json();
             if (data.success) {
-                setUser(data.user);
-                setOrganizations(data.organization);
-            } else {
-                toast.error("Failed to load profile");
+                setOrganizations(data.organizations);
             }
         } catch (err) {
-            console.error(err);
-            toast.error("Failed to load profile");
-        } finally {
-            setLoading(false);
+            console.error("Failed to fetch orgs", err);
         }
     };
 
     useEffect(() => {
-        fetchProfile();
+        // fetchProfile removed - using useAuth
+        fetchOrgs();
         fetchPreferences();
         fetchSessions();
     }, []);
@@ -152,7 +151,7 @@ export default function ProfilePage() {
             const data = await res.json();
             if (data.success) {
                 toast.success("Organization added successfully");
-                fetchProfile();
+                fetchOrgs();
                 setOrgForm({
                     orgEmail: "",
                     orgPassword: "",
@@ -182,7 +181,7 @@ export default function ProfilePage() {
             const data = await res.json();
             if (data.success) {
                 toast.success("Organization deleted successfully");
-                fetchProfile();
+                fetchOrgs();
             } else {
                 toast.error(data.error || "Failed to delete organization");
             }
@@ -225,7 +224,8 @@ export default function ProfilePage() {
             const data = await res.json();
             if (data.success) {
                 toast.success("Profile updated successfully");
-                setUser(data.user);
+                setUser(data.user); // Optimistic update
+                refreshUser(); // Sync Global Context
                 setEditingProfile(false);
             } else {
                 toast.error(data.error || "Failed to update profile");
@@ -564,7 +564,7 @@ export default function ProfilePage() {
                                                     <Building2 className={`w-6 h-6 ${org.is_sandbox ? 'text-yellow-600' : 'text-green-600'}`} />
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-lg font-semibold text-gray-900">Organization {idx + 1}</h3>
+                                                    <h3 className="text-lg font-semibold text-gray-900">{org.org_name}</h3>
                                                     <p className="text-xs text-gray-500">Connected</p>
                                                 </div>
                                             </div>

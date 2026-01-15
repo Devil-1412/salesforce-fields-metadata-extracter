@@ -159,21 +159,20 @@ export default function SoqlPage() {
         setOrgLoading(true);
         setOrgError("");
         try {
-            const res = await fetch("/api/salesforceLogin", {
+            const res = await fetch("/api/listAllOrgs", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
-                },
-                body: JSON.stringify({}),
+                }
             });
             const data = await res.json();
-            if (!data.success || !Array.isArray(data.data)) {
+            if (!data.success || !Array.isArray(data.organizations)) {
                 if (data.error && data.error.includes("expired")) {
                     throw new Error("Session expired. Please log in again.");
                 }
                 throw new Error(data.error || "Could not fetch organizations.");
             }
-            setOrgs(data.data);
+            setOrgs(data.organizations);
         } catch (error) {
             const message = error?.message || "Unable to load organizations.";
             setOrgError(message);
@@ -188,21 +187,46 @@ export default function SoqlPage() {
     }, [loadOrgs]);
 
     const selectOrg = useCallback(
-        (instanceValue, { silent = false } = {}) => {
+        async (instanceValue, { silent = false } = {}) => {
             if (!instanceValue) return;
-            const org = orgs.find((item) => item.instanceUrl === instanceValue);
+            const org = orgs.find((item) => item.instance_url === instanceValue || item.instanceUrl === instanceValue);
             if (!org) return;
-            setSelectedOrgId(org.instanceUrl);
-            setSelectedOrgMeta(org);
-            setToken(org.accessToken);
-            setInstanceUrl(org.instanceUrl);
-            localStorage.setItem("accessToken", org.accessToken);
-            localStorage.setItem("instanceUrl", org.instanceUrl);
-            if (!silent) {
-                toast.success(
-                    `Loaded ${org.orgName && org.orgName !== "None" ? org.orgName : "Salesforce organization"
-                    }`
-                );
+            
+            const targetInstanceUrl = org.instance_url || org.instanceUrl;
+
+            // Login to get access token if not silent (or even if silent, we might need to refresh)
+            const toastId = !silent ? toast.loading(`Logging in to ${org.org_name || "Salesforce"}...`) : null;
+            
+            try {
+                const res = await fetch("/api/salesforceLogin", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    setSelectedOrgId(targetInstanceUrl);
+                    setSelectedOrgMeta({ ...org, accessToken: data.accessToken, instanceUrl: targetInstanceUrl });
+                    setToken(data.accessToken);
+                    setInstanceUrl(targetInstanceUrl);
+                    localStorage.setItem("accessToken", data.accessToken);
+                    localStorage.setItem("instanceUrl", targetInstanceUrl);
+                    
+                    if (!silent && toastId) {
+                        toast.success(
+                            `Loaded ${data.orgName && data.orgName !== "None" ? data.orgName : "Salesforce organization"
+                            }`, { id: toastId }
+                        );
+                    }
+                } else {
+                    if (toastId) toast.error(data.error || "Login failed", { id: toastId });
+                }
+            } catch (err) {
+                 console.error("Login failed", err);
+                 if (toastId) toast.error("Login failed", { id: toastId });
             }
         },
         [orgs]

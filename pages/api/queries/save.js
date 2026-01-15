@@ -1,9 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 import { getAuthToken } from "@lib/cookieAuth";
+import { saveQuerySchema } from "@lib/validation/schemas";
+import { validateRequestBody } from "@lib/validation/middleware";
+import { handleApiError } from "@lib/errorHandler";
+import { validateContentType } from "@lib/contentTypeValidator";
 
 export default async function handler(req, res) {
-    if (req.method !== "POST") {
+    if (req.method != "POST") {
         return res.status(405).json({ success: false, error: "Method not allowed" });
+    }
+
+    // Validate Content-Type
+    if (!validateContentType(req, res)) {
+        return;
     }
 
     try {
@@ -12,11 +21,13 @@ export default async function handler(req, res) {
             return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
-        const { name, query } = req.body;
-
-        if (!name || !query) {
-            return res.status(400).json({ success: false, error: "Name and query are required" });
+        // Validate request body
+        const validated = validateRequestBody(saveQuerySchema, req, res);
+        if (!validated) {
+            return;
         }
+
+        const { name, query } = validated;
 
         const supabase = createClient(
             process.env.SUPABASE_URL,
@@ -50,7 +61,6 @@ export default async function handler(req, res) {
         res.status(200).json({ success: true, data });
 
     } catch (error) {
-        console.error("Save query error:", error);
-        res.status(500).json({ success: false, error: error.message || "Failed to save query" });
+        return handleApiError(error, req, res, 'queries-save');
     }
 }

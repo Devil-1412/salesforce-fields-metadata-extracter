@@ -88,42 +88,67 @@
     "id": "uuid",
     "email": "user@example.com"
   },
-  "session": {
-    "access_token": "jwt-token",
-    "refresh_token": "refresh-token",
-    "expires_in": 3600
-  },
   "hasOrganization": true
 }
 ```
 
 **Features**:
 
+- Sets httpOnly cookies for access token (15 min expiry) and refresh token (7 day expiry)
 - Tracks session in `active_sessions` table
 - Captures IP address, device info, user agent
 - Checks if user has linked Salesforce orgs
+- Tokens are NOT returned in response body (stored in cookies only)
+
+---
+
+### POST `/api/refresh`
+
+**Purpose**: Refresh expired access token using refresh token
+
+**Auth Required**: Yes (refresh token in httpOnly cookie)
+
+**Request Body**: None (tokens read from cookies)
+
+**Response** (200):
+
+```json
+{
+  "success": true,
+  "message": "Token refreshed successfully",
+  "expiresIn": 900
+}
+```
+
+**Response** (401 - refresh token expired):
+
+```json
+{
+  "success": false,
+  "error": "Invalid or expired refresh token",
+  "requiresLogin": true
+}
+```
+
+**Features**:
+
+- Uses Supabase's `refreshSession()` for token rotation
+- Updates `active_sessions` table with new access token
+- Sets new access and refresh token cookies
+- Implements refresh token rotation (one-time use)
+- Automatic frontend refresh happens every 12 minutes
 
 ---
 
 ### POST `/api/logout`
 
-**Purpose**: Invalidate user session
+**Purpose**: Invalidate user session and clear tokens
 
-**Auth Required**: Yes (Bearer token)
+**Auth Required**: Yes (httpOnly cookie)
 
-**Request Headers**:
+**Request Headers**: None (token read from cookie)
 
-```
-Authorization: Bearer <access_token>
-```
-
-**Request Body**:
-
-```json
-{
-  "sessionToken": "jwt-token"
-}
-```
+**Request Body**: None
 
 **Response** (200):
 
@@ -137,7 +162,8 @@ Authorization: Bearer <access_token>
 **Features**:
 
 - Removes session from `active_sessions` table
-- Invalidates JWT token
+- Calls Supabase Auth admin signOut
+- Clears both access and refresh token cookies
 
 ---
 

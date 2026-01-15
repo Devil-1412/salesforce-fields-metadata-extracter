@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-import { setAuthCookie } from "../../lib/cookieAuth";
+import { getServiceRoleClient } from "@lib/supabaseClient";
+import { setAuthCookie } from "@lib/cookieAuth";
 
 // Helper function to extract IP address from request
 function getClientIp(req) {
@@ -50,18 +50,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Email and password are required." });
     }
 
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-        console.error("Missing Supabase credentials in environment variables.");
-        return res.status(500).json({ success: false, error: "Server misconfiguration." });
-    }
-
     // Create Supabase server-side client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: { persistSession: false },
-    });
+    const supabase = getServiceRoleClient();
 
     try {
         // Sign in the user using Supabase Auth

@@ -1,27 +1,33 @@
-import { createClient } from "@supabase/supabase-js";
+import { getServiceRoleClient } from "@lib/supabaseClient";
 import jsforce from "jsforce";
-import { encrypt } from "../../lib/encryption";
-import { jsforceRateLimiter } from "../../lib/rateLimiter";
-import { getAuthToken } from "../../lib/cookieAuth";
+import { encrypt } from "@lib/encryption";
+import { jsforceRateLimiter } from "@lib/rateLimiter";
+import { getAuthToken } from "@lib/cookieAuth";
+import { addOrgSchema } from "@lib/validation/schemas";
+import { validateRequestBody } from "@lib/validation/middleware";
+import { handleApiError, logError, sanitizeError } from "@lib/errorHandler";
+import { validateContentType } from "@lib/contentTypeValidator";
 
 async function handler(req, res) {
     if (req.method !== "POST")
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
-    try {
-        const { orgEmail, orgPassword, securityToken, isSandbox } = req.body;
+    // Validate Content-Type
+    if (!validateContentType(req, res)) {
+        return;
+    }
 
-        if (!orgEmail || !orgPassword || !securityToken) {
-            return res
-                .status(400)
-                .json({ success: false, error: "Missing required fields" });
+    try {
+        // Validate request body
+        const validated = validateRequestBody(addOrgSchema, req, res);
+        if (!validated) {
+            return;
         }
 
+        const { orgEmail, orgPassword, securityToken, isSandbox } = validated;
+
         // Initialize Supabase client with service role (needed for Vault)
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
+        const supabase = getServiceRoleClient();
 
         const token = getAuthToken(req);
         if (!token) {
@@ -34,16 +40,6 @@ async function handler(req, res) {
         if (authError || !user) {
             return res.status(401).json({ success: false, error: "Invalid token" });
         }
-
-        // Fetch user profile
-        const { data: profile, error: userError } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("id", user.id)
-            .single();
-
-        if (userError || !profile)
-            return res.status(404).json({ success: false, error: "User not found" });
 
         // Determine correct Salesforce login URL
         const loginUrl = isSandbox
@@ -58,13 +54,17 @@ async function handler(req, res) {
             await conn.login(orgEmail, orgPassword + securityToken);
             instanceUrl = conn.instanceUrl;
             
-            // Get org details
-            const identity = await conn.identity();
-            orgName = identity.organization_id; // You can get actual org name if needed
+            // Get org Name
+            const orgInfo = await conn.query("SELECT Name FROM Organization LIMIT 1");
+            if (orgInfo.records?.length > 0) {
+                orgName = orgInfo.records[0].Name;
+            } else {
+                orgName = "Unknown Org";
+            }
             
             console.log(`✅ Salesforce connection verified: ${instanceUrl}`);
         } catch (sfError) {
-            console.error("❌ Salesforce login failed:", sfError.message);
+            logError(sfError, req, 'addOrg-salesforce');
             return res.status(401).json({
                 success: false,
                 error: "Invalid Salesforce credentials. Please check and try again.",
@@ -80,7 +80,7 @@ async function handler(req, res) {
             encryptedToken = encrypt(securityToken);
             console.log('✅ Credentials encrypted successfully');
         } catch (encryptError) {
-            console.error('❌ Encryption failed:', encryptError);
+            logError(encryptError, req, 'addOrg-encryption');
             return res.status(500).json({
                 success: false,
                 error: "Failed to encrypt credentials. Please try again.",
@@ -90,8 +90,9 @@ async function handler(req, res) {
         // Insert org with encrypted credentials
         const { error: insertError } = await supabase.from("organizations").insert([
             {
-                user_id: profile.id,
+                user_id: user.id,
                 org_email: orgEmail,
+                org_name: orgName,
                 encrypted_org_password: encryptedPassword, // ✅ AES-256 Encrypted
                 encrypted_security_token: encryptedToken,   // ✅ AES-256 Encrypted
                 is_sandbox: isSandbox,
@@ -115,8 +116,7 @@ async function handler(req, res) {
             instanceUrl,
         });
     } catch (err) {
-        console.error("AddOrg API error:", err);
-        return res.status(500).json({ success: false, error: "Server error" });
+        return handleApiError(err, req, res, 'addOrg');
     }
 }
 

@@ -1,5 +1,5 @@
 // pages/api/signup.js
-import { createClient } from "@supabase/supabase-js";
+import { getServiceRoleClient } from "@lib/supabaseClient";
 
 /**
  * Simple in-memory rate limiter (per IP) — good enough for small apps / demos.
@@ -62,22 +62,9 @@ export default async function handler(req, res) {
         });
     }
 
-    // Ensure env vars are present
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        console.error("Missing SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in env");
-        return res.status(500).json({
-            success: false,
-            error: "Server misconfiguration. Contact administrator.",
-        });
-    }
 
     // Create Supabase admin client (service role key required)
-    const supabase = createClient(SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-        // don't persist auth on the server client
-        auth: { persistSession: false },
-    });
+    const supabase = getServiceRoleClient();
 
     try {
         // Optional: check if user already exists — using admin listUsers

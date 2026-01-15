@@ -1,41 +1,34 @@
-import { createClient } from "@supabase/supabase-js";
-import { getAuthToken } from "../../lib/cookieAuth";
+import { getServiceRoleClient } from "@lib/supabaseClient";
+import { getAuthToken } from "@lib/cookieAuth";
+import { changePasswordSchema } from "@lib/validation/schemas";
+import { validateRequestBody } from "@lib/validation/middleware";
+import { validateContentType } from "@lib/contentTypeValidator";
 
 export default async function handler(req, res) {
     if (req.method !== "POST")
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
-    try {
-        const { currentPassword, newPassword } = req.body;
+    // Validate Content-Type
+    if (!validateContentType(req, res)) {
+        return;
+    }
 
-        if (!currentPassword || !newPassword) {
-            return res.status(400).json({
-                success: false,
-                error: "Missing required fields: currentPassword, newPassword"
-            });
+    try {
+        // Validate request body
+        const validated = validateRequestBody(changePasswordSchema, req, res);
+        if (!validated) {
+            return;
         }
+
+        const { currentPassword, newPassword } = validated;
 
         const token = getAuthToken(req);
         if (!token) {
             return res.status(401).json({ success: false, error: "Missing or invalid authorization token" });
         }
 
-        // Validate new password strength
-        if (newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-            return res.status(400).json({
-                success: false,
-                error: "New password must be at least 8 characters and include letters and numbers",
-            });
-        }
-
         // Create Supabase client with anon key for auth operations
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-            {
-                auth: { persistSession: false },
-            }
-        );
+        const supabase = getServiceRoleClient();
 
         // Verify user token
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);

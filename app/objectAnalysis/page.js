@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
+import OrgHeader from "@components/OrgHeader";
+import FilterBar from "@components/FilterBar";
+import VirtualTable from "@components/VirtualTable";
+import EmptyState from "@components/EmptyState";
+
 const FILTER_OPTIONS = [
   { key: "all", label: "All objects" },
   { key: "custom", label: "Custom objects" },
@@ -34,40 +39,22 @@ export default function ObjectAnalysisPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selectedObject, setSelectedObject] = useState(null);
-  // Supabase Auth Token - REMOVED for cookie auth
-  // const [sessionToken, setSessionToken] = useState(""); 
-
-  // Session check handled by middleware/cookies/backend
-  /*
-  useEffect(() => {
-    const getSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            setSessionToken(session.access_token);
-        } else {
-            router.push("/login");
-        }
-    };
-    getSession();
-  }, [router]);
-  */
 
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
     setOrgError("");
     try {
-      const res = await fetch("/api/salesforceLogin", {
+      const res = await fetch("/api/listAllOrgs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
-        },
-        body: JSON.stringify({}),
+        }
       });
       const data = await res.json();
-      if (!data.success || !Array.isArray(data.data)) {
+      if (!data.success || !Array.isArray(data.organizations)) {
         throw new Error(data.error || "Could not fetch organizations.");
       }
-      setOrgs(data.data);
+      setOrgs(data.organizations);
     } catch (error) {
       const message = error?.message || "Unable to load organizations.";
       setOrgError(message);
@@ -82,33 +69,63 @@ export default function ObjectAnalysisPage() {
   }, [loadOrgs]);
 
   const selectOrg = useCallback(
-    (instanceValue, { silent = false } = {}) => {
+    async (instanceValue, { silent = false } = {}) => {
       if (!instanceValue) return;
-      const org = orgs.find((item) => item.instanceUrl === instanceValue);
+      const org = orgs.find((item) => item.instance_url === instanceValue || item.instanceUrl === instanceValue);
       if (!org) return;
-      setSelectedOrgId(org.instanceUrl);
-      setSelectedOrgMeta(org);
-      setToken(org.accessToken);
-      setInstanceUrl(org.instanceUrl);
-      setCounts({});
-      localStorage.setItem("accessToken", org.accessToken);
-      localStorage.setItem("instanceUrl", org.instanceUrl);
-      if (!silent) {
-        toast.success(
-          `Loaded ${org.orgName && org.orgName !== "None" ? org.orgName : "Salesforce organization"
-          }`
-        );
+
+      const targetInstanceUrl = org.instance_url || org.instanceUrl;
+
+      // Login to get access token if not silent (or even if silent, we might need to refresh)
+      const toastId = !silent ? toast.loading(`Logging in to ${org.org_name || "Salesforce"}...`) : null;
+
+      try {
+        const res = await fetch("/api/salesforceLogin", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            setSelectedOrgId(targetInstanceUrl);
+            setSelectedOrgMeta({ ...org, accessToken: data.accessToken, instanceUrl: targetInstanceUrl });
+            setToken(data.accessToken);
+            setInstanceUrl(targetInstanceUrl);
+            setCounts({});
+            localStorage.setItem("accessToken", data.accessToken);
+            localStorage.setItem("instanceUrl", targetInstanceUrl);
+            
+            if (!silent && toastId) {
+                toast.success(
+                `Loaded ${data.orgName && data.orgName !== "None" ? data.orgName : "Salesforce organization"
+                }`, { id: toastId }
+                );
+            }
+        } else {
+             if (toastId) toast.error(data.error || "Login failed", { id: toastId });
+        }
+      } catch (err) {
+        console.error("Login failed", err);
+        if (toastId) toast.error("Login failed", { id: toastId });
       }
     },
     [orgs]
   );
 
   useEffect(() => {
+    // Automatic selection disabled by user request
+    /*
     if (!orgs.length) return;
     const savedInstance = localStorage.getItem("instanceUrl");
     const initialOrg =
       orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
-    selectOrg(initialOrg.instanceUrl, { silent: true });
+    if (initialOrg) {
+        selectOrg(initialOrg.instanceUrl || initialOrg.instance_url, { silent: true });
+    }
+    */
   }, [orgs, selectOrg]);
 
   const loadObjects = useCallback(
@@ -250,61 +267,15 @@ export default function ObjectAnalysisPage() {
   return (
     <div className="min-h-screen bg-slate-50 py-6 px-3 sm:px-3">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-2xl">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">
-                Salesforce Object Analysis
-              </h1>
-              <p className="mt-1 max-w-xl text-slate-100">
-                Browse your Salesforce sObjects, understand their origin, and
-                quickly extract metadata for analysis.
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-3">
-              <div className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-50 transition duration-500"></div>
-                <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-1 shadow-lg">
-                  <div className="hidden sm:block px-3 text-xs font-bold text-blue-100 uppercase tracking-wider select-none">
-                    Active Org
-                  </div>
-                  <div className="hidden sm:block h-6 w-px bg-white/20 mx-1"></div>
-                  <div className="relative">
-                    <select
-                      className="bg-transparent text-white text-sm font-semibold focus:outline-none cursor-pointer py-2 pl-3 pr-10 appearance-none min-w-[220px] hover:text-blue-50 transition-colors"
-                      value={selectedOrgId || ""}
-                      onChange={(event) => selectOrg(event.target.value)}
-                      disabled={orgLoading || !orgs.length}
-                    >
-                      <option value="" disabled className="text-gray-500 bg-white">
-                        {orgLoading ? "Loading..." : "Select Organization"}
-                      </option>
-                      {orgs.map((org) => (
-                        <option key={org.instanceUrl} value={org.instanceUrl} className="text-gray-900 bg-white py-2">
-                          {org.orgName && org.orgName !== "None" ? org.orgName : "Salesforce Org"}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/80">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {selectedOrgMeta?.instanceUrl && (
-                <div className="flex items-center gap-2 text-xs text-blue-50 bg-black/20 px-3 py-1.5 rounded-full border border-white/10 shadow-sm backdrop-blur-sm transition-all hover:bg-black/30">
-                  <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]"></div>
-                  <span className="font-mono tracking-tight opacity-90">
-                    {selectedOrgMeta.instanceUrl.replace("https://", "").replace(".my.salesforce.com", "")}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+        <OrgHeader
+          title="Salesforce Object Analysis"
+          description="Browse your Salesforce sObjects, understand their origin, and quickly extract metadata for analysis."
+          orgs={orgs}
+          selectedOrgId={selectedOrgId}
+          onSelectOrg={selectOrg}
+          orgLoading={orgLoading}
+          selectedOrgMeta={selectedOrgMeta}
+        />
 
         {orgError && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -355,14 +326,11 @@ export default function ObjectAnalysisPage() {
         </section>
 
         <section className="rounded-3xl bg-white p-6 shadow-xl">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by API name or label"
-              className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 md:max-w-md"
-            />
+          <FilterBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by API name or label"
+          >
             <div className="flex flex-wrap gap-2">
               {FILTER_OPTIONS.map((option) => {
                 const active = filter === option.key;
@@ -380,7 +348,8 @@ export default function ObjectAnalysisPage() {
                 );
               })}
             </div>
-          </div>
+            {/* FilterBar children endpoint */}
+          </FilterBar>
 
           {fetchError && (
             <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -388,52 +357,45 @@ export default function ObjectAnalysisPage() {
             </div>
           )}
 
-          <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
-            {loading ? (
-              <div className="flex h-60 items-center justify-center text-sm text-slate-500">
+          {loading ? (
+             <div className="flex h-60 items-center justify-center text-sm text-slate-500">
                 Loading objects…
               </div>
-            ) : filteredObjects.length ? (
-              <table className="min-w-full text-sm border-collapse">
-                <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md h-fixed">
-                  <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
-                      #
-                    </th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Label</th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">API Name</th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Type</th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Created</th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">Last Modified</th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">ID Prefix</th>
-                    <th className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700 text-right">Records</th>
-                  </tr>
-                </thead>
-                <tbody className="border-t-1 border-gray-200">
-                  {filteredObjects.map((object, index) => (
-                    <tr
-                      key={object.name}
-                      className={
-                        index % 2 === 0 ? "bg-white border-l-4 border-transparent hover:border-blue-300" : "bg-slate-50 border-l-4 border-transparent hover:border-blue-300"
-                      }
-                    >
-                      <td className="p-4 text-center text-gray-700">
-                        {index + 1}
-                      </td>
-                      <td className="p-4 text-center text-gray-700 font-medium">
+          ) : filteredObjects.length > 0 ? (
+            <VirtualTable
+              data={filteredObjects}
+              columns={[
+                 { 
+                    key: 'index', 
+                    label: '#', 
+                    width: '5%',
+                    render: (_, i) => i + 1
+                 },
+                 { 
+                    key: 'label', 
+                    label: 'Label', 
+                    width: '20%',
+                    render: (object) => (
                         <button
                           onClick={() => handleObjectClick(object)}
-                          className="hover:text-blue-600 hover:underline text-left"
+                          className="hover:text-blue-600 hover:underline text-left font-medium"
                         >
                           {object.label || object.name}
                         </button>
-                      </td>
-                      <td className="p-4 text-center text-gray-700 font-medium">{object.name}</td>
-                      <td className="p-4 text-center text-gray-700 font-medium">
-                        {object.custom ? "Custom" : "Standard"}
-                      </td>
-                      <td className="p-4 text-center text-gray-700 font-medium">
-                        {object.createdDate ? (
+                    )
+                 },
+                 { key: 'name', label: 'API Name', width: '20%' },
+                 { 
+                    key: 'custom', 
+                    label: 'Type', 
+                    width: '10%',
+                    render: (object) => object.custom ? "Custom" : "Standard"
+                 },
+                 { 
+                    key: 'createdDate', 
+                    label: 'Created', 
+                    width: '15%',
+                    render: (object) => object.createdDate ? (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-900">
                               {new Date(object.createdDate).toLocaleDateString() == "1/1/1970" ? "—" : new Date(object.createdDate).toLocaleDateString()}
@@ -442,12 +404,13 @@ export default function ObjectAnalysisPage() {
                               {object.createdByName || "Unknown"}
                             </span>
                           </div>
-                        ) : (
-                          <span className="text-gray-700">—</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-center text-gray-700 font-medium">
-                        {object.lastModifiedDate ? (
+                        ) : <span className="text-gray-700">—</span>
+                 },
+                 { 
+                    key: 'lastModifiedDate', 
+                    label: 'Last Modified', 
+                    width: '15%',
+                    render: (object) => object.lastModifiedDate ? (
                           <div className="flex flex-col">
                             <span className="text-xs font-medium text-gray-900">
                               {new Date(object.lastModifiedDate).toLocaleDateString() == "1/1/1970" ? "—" : new Date(object.lastModifiedDate).toLocaleDateString()}
@@ -456,14 +419,19 @@ export default function ObjectAnalysisPage() {
                               {object.lastModifiedByName || "Unknown"}
                             </span>
                           </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-center text-gray-700 font-medium">{object.keyPrefix || "—"}</td>
-                      <td className="p-4 text-center text-gray-700 font-medium">
+                        ) : <span className="text-gray-400">—</span>
+                 },
+                 { key: 'keyPrefix', label: 'Prefix', width: '10%' },
+                 { 
+                    key: 'records', 
+                    label: 'Records', 
+                    width: '10%',
+                    render: (object) => (
                         <button
-                          onClick={() => fetchRecordCount(object.name)}
+                          onClick={(e) => {
+                              e.stopPropagation();
+                              fetchRecordCount(object.name);
+                          }}
                           disabled={countLoadingFor === object.name}
                           className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -473,20 +441,18 @@ export default function ObjectAnalysisPage() {
                               ? formatLargeNumber(counts[object.name])
                               : "Get count"}
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-            ) : (
-              <div className="flex h-48 items-center justify-center text-sm text-slate-500">
-                No objects match your search or filter.
-              </div>
-            )}
-          </div>
-        </section >
-      </div >
+                    )
+                 }
+              ]}
+            />
+          ) : (
+            <EmptyState 
+                title="No objects found"
+                description="Try adjusting your search or filter."
+            />
+          )}
+        </section>
+      </div> 
 
       {/* Object Details Modal */}
       {
@@ -635,36 +601,31 @@ function ObjectDetailsModal({ object, onClose }) {
 
           {/* Child Relationships */}
           {object.childRelationships && object.childRelationships.length > 0 && (
-            <section>
+            <section className="flex flex-col h-[500px]"> 
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Child Relationships</h3>
-              <div className="overflow-hidden border border-gray-200 rounded-xl">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Child Object</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Field</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Relationship Name</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cascade Delete</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {object.childRelationships.map((rel, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{rel.childSObject}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{rel.field}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{rel.relationshipName || '-'}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {rel.cascadeDelete ? (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Yes</span>
-                          ) : (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">No</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <VirtualTable
+                  data={object.childRelationships}
+                  columns={[
+                    { label: "Child Object", key: "childSObject", width: "25%" },
+                    { label: "Field", key: "field", width: "25%" },
+                    { label: "Relationship Name", key: "relationshipName", width: "25%", render: (item) => item.relationshipName || '-' },
+                    { 
+                      label: "Cascade Delete", 
+                      key: "cascadeDelete", 
+                      width: "25%",
+                      render: (item) => (
+                        item.cascadeDelete ? (
+                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Yes</span>
+                        ) : (
+                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">No</span>
+                        )
+                      )
+                    }
+                  ]}
+                  rowClassName="hover:bg-gray-50"
+                  itemSize={50}
+                  className="flex-1 min-h-0 h-auto"
+                />
             </section>
           )}
 

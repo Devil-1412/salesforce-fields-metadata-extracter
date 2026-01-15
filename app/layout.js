@@ -7,16 +7,20 @@ export const metadata = {
   description: "Explore, compare, and analyze Salesforce metadata effortlessly.",
 };
 
+import { AuthProvider } from "./context/authContext";
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="bg-gradient-to-br from-gray-50 via-white to-blue-50 text-gray-800 min-h-screen flex flex-col">
         {/* Navbar is client-side */}
-        <Navbar />
+        <AuthProvider>
+            <Navbar />
 
-        <main className="flex-grow w-full max-w-[95%] mx-auto px-4 sm:px-6 py-6">
-          {children}
-        </main>
+            <main className="flex-grow w-full max-w-[95%] mx-auto px-4 sm:px-6 py-6">
+            {children}
+            </main>
+        </AuthProvider>
 
         <footer className="relative mt-8 bg-gradient-to-br from-blue-800 via-indigo-800 to-blue-900 text-white rounded-t-3xl shadow-2xl">
           {/* Decorative gradient glow */}

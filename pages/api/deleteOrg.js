@@ -1,28 +1,32 @@
-import { createClient } from "@supabase/supabase-js";
+import { getServiceRoleClient } from "@lib/supabaseClient";
+import { deleteOrgSchema } from "@lib/validation/schemas";
+import { validateRequestBody } from "@lib/validation/middleware";
+import { validateContentType } from "@lib/contentTypeValidator";
 
 export default async function handler(req, res) {
     if (req.method !== "POST")
         return res.status(405).json({ success: false, error: "Method not allowed" });
 
-    try {
-        const { email, orgId } = req.body;
+    // Validate Content-Type
+    if (!validateContentType(req, res)) {
+        return;
+    }
 
-        if (!orgId) {
-            return res.status(400).json({
-                success: false,
-                error: "Missing required fields: orgId"
-            });
+    try {
+        // Validate request body
+        const validated = validateRequestBody(deleteOrgSchema, req, res);
+        if (!validated) {
+            return;
         }
+
+        const { orgId } = validated;
 
         const token = req.headers.authorization?.split(" ")[1];
         if (!token) {
             return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
+        const supabase = getServiceRoleClient();
 
         // Verify user token
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);

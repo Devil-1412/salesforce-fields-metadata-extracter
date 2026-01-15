@@ -1,5 +1,5 @@
 import jsforce from "jsforce";
-import { jsforceRateLimiter } from "../../lib/rateLimiter";
+import { jsforceRateLimiter } from "@lib/rateLimiter";
 
 async function handler(req, res) {
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });

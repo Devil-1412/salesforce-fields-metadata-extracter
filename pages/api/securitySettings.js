@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-import { getAuthToken } from "../../lib/cookieAuth";
+import { getServiceRoleClient } from "@lib/supabaseClient";
+import { getAuthToken } from "@lib/cookieAuth";
 
 export default async function handler(req, res) {
     if (req.method !== "POST")
@@ -20,10 +20,7 @@ export default async function handler(req, res) {
             return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
 
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
+        const supabase = getServiceRoleClient();
 
         // Verify user token
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);

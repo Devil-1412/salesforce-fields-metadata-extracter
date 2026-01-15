@@ -2,6 +2,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import SearchableDropdown from "@components/SearchableDropdown";
+import OrgHeader from "@components/OrgHeader";
+import VirtualTable from "@components/VirtualTable";
+import EmptyState from "@components/EmptyState";
+import FilterBar from "@components/FilterBar";
+import FieldDetailsPanel from "../components/FieldDetailsPanel";
+import FieldAnalysisTable from "../components/FieldAnalysisTable";
 
 export default function MetadataPage() {
 
@@ -89,7 +95,7 @@ export default function MetadataPage() {
     "Formula"
   ];
 
-  const TABS = ["Fields", "Validation Rules", "Triggers", "Apex Classes", "Workflows"];
+  const TABS = ["Fields", "Field Analysis", "Validation Rules", "Triggers", "Apex Classes", "Workflows"];
   const [activeTab, setActiveTab] = useState("Fields");
 
   // Org State
@@ -132,16 +138,15 @@ export default function MetadataPage() {
   const loadOrgs = useCallback(async () => {
     setOrgLoading(true);
     try {
-      const res = await fetch("/api/salesforceLogin", {
+      const res = await fetch("/api/listAllOrgs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
-        },
-        body: JSON.stringify({}),
+        }
       });
       const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
-        setOrgs(data.data);
+      if (data.success && Array.isArray(data.organizations)) {
+        setOrgs(data.organizations);
       }
     } catch (error) {
       console.error("Failed to load orgs", error);
@@ -156,36 +161,59 @@ export default function MetadataPage() {
   }, [loadOrgs]);
 
   // Select Org Logic
-  const selectOrg = useCallback((instanceValue) => {
-    const org = orgs.find((item) => item.instanceUrl === instanceValue);
+  const selectOrg = useCallback(async (instanceValue) => {
+    const org = orgs.find((item) => item.instance_url === instanceValue || item.instanceUrl === instanceValue);
     if (!org) return;
 
-    setSelectedOrgId(org.instanceUrl);
-    setSelectedOrgMeta(org);
-    setToken(org.accessToken);
-    setInstanceUrl(org.instanceUrl);
+    const targetInstanceUrl = org.instance_url || org.instanceUrl;
 
-    // Reset object state
-    setObjects([]);
-    setSelectedObject("");
-    setFieldsData({});
-    setValidationRules([]);
-    setTriggers([]);
-    setApexClasses([]);
-    setWorkflows([]);
-    setRecordCounts({});
+    // Login to get access token
+    const toastId = toast.loading(`Logging in to ${org.org_name || "Salesforce"}...`);
+    try {
+        const res = await fetch("/api/salesforceLogin", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
+        });
+        const data = await res.json();
 
-    toast.success(`Connected to ${org.orgName || "Salesforce Org"}`);
+        if (data.success) {
+            setSelectedOrgId(targetInstanceUrl);
+            setSelectedOrgMeta({ ...org, accessToken: data.accessToken, instanceUrl: targetInstanceUrl });
+            setToken(data.accessToken);
+            setInstanceUrl(targetInstanceUrl);
+
+            // Reset object state
+            setObjects([]);
+            setSelectedObject("");
+            setFieldsData({});
+            setValidationRules([]);
+            setTriggers([]);
+            setApexClasses([]);
+            setWorkflows([]);
+            setRecordCounts({});
+
+            toast.success(`Connected to ${data.orgName || "Salesforce Org"}`, { id: toastId });
+        } else {
+             toast.error(data.error || "Login failed", { id: toastId });
+        }
+    } catch (err) {
+        console.error("Login Error:", err);
+        toast.error("Login failed", { id: toastId });
+    }
   }, [orgs]);
 
   // Auto-select previously used org
   useEffect(() => {
     if (orgs.length > 0 && !selectedOrgId) {
-      const savedInstance = localStorage.getItem("instanceUrl");
-      const initialOrg = orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
-      if (initialOrg) {
-        selectOrg(initialOrg.instanceUrl);
-      }
+      // Disabled auto-select as per user request history
+      // const savedInstance = localStorage.getItem("instanceUrl");
+      // const initialOrg = orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
+      // if (initialOrg) {
+      //   selectOrg(initialOrg.instanceUrl);
+      // }
     }
   }, [orgs, selectedOrgId, selectOrg]);
 
@@ -319,62 +347,17 @@ export default function MetadataPage() {
       <div className="w-full max-w-[98%] bg-white shadow-2xl rounded-3xl p-10 border border-gray-200 min-h-[90vh] overflow-visible">
 
         {/* 🌈 HEADER SECTION */}
-        <header className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 px-10 rounded-3xl shadow-lg mb-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight mb-1">
-                Salesforce Metadata Explorer
-              </h1>
-              <p className="text-blue-100 text-sm">
-                Analyze objects, fields, and automation in your Salesforce org.
-              </p>
-            </div>
-
-            {/* Org Selector */}
-            <div className="flex flex-col items-end gap-3">
-              <div className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-2xl blur opacity-20 group-hover:opacity-50 transition duration-500"></div>
-                <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-1 shadow-lg">
-                  <div className="hidden sm:block px-3 text-xs font-bold text-blue-100 uppercase tracking-wider select-none">
-                    Active Org
-                  </div>
-                  <div className="hidden sm:block h-6 w-px bg-white/20 mx-1"></div>
-                  <div className="relative">
-                    <select
-                      className="bg-transparent text-white text-sm font-semibold focus:outline-none cursor-pointer py-2 pl-3 pr-10 appearance-none min-w-[220px] hover:text-blue-50 transition-colors"
-                      value={selectedOrgId || ""}
-                      onChange={(event) => selectOrg(event.target.value)}
-                      disabled={orgLoading || !orgs.length}
-                    >
-                      <option value="" disabled className="text-gray-500 bg-white">
-                        {orgLoading ? "Loading..." : "Select Organization"}
-                      </option>
-                      {orgs.map((org) => (
-                        <option key={org.instanceUrl} value={org.instanceUrl} className="text-gray-900 bg-white py-2">
-                          {org.orgName && org.orgName !== "None" ? org.orgName : "Salesforce Org"}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-white/80">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {selectedOrgMeta?.instanceUrl && (
-                <div className="flex items-center gap-2 text-xs text-blue-50 bg-black/20 px-3 py-1.5 rounded-full border border-white/10 shadow-sm backdrop-blur-sm transition-all hover:bg-black/30">
-                  <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]"></div>
-                  <span className="font-mono tracking-tight opacity-90">
-                    {selectedOrgMeta.instanceUrl.replace("https://", "").replace(".my.salesforce.com", "")}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
+        <div className="mb-8">
+          <OrgHeader
+            title="Salesforce Metadata Explorer"
+            description="Analyze objects, fields, and automation in your Salesforce org."
+            orgs={orgs}
+            selectedOrgId={selectedOrgId}
+            onSelectOrg={selectOrg}
+            orgLoading={orgLoading}
+            selectedOrgMeta={selectedOrgMeta}
+          />
+        </div>
 
         {/* 🧩 OBJECT SELECTION + INFO SECTION */}
         <section className="w-full bg-white border border-gray-200 rounded-2xl shadow-md px-8 py-6 mb-8 flex flex-col md:flex-row justify-between items-center">
@@ -437,27 +420,55 @@ export default function MetadataPage() {
             </div>
 
             {/* 🔹 Tab Content */}
-            {activeTab === "Fields" && (
-              <FieldsTable
-                selectedObject={selectedObject}
-                selectedObjects={[selectedObject]} // Pass as array for compatibility
-                fieldsData={fieldsData}
-                allMetadataKeys={allMetadataKeys}
-                objects={objects}
-              />
-            )}
+            <div className="h-[600px] flex flex-col w-full">
+                {activeTab === "Fields" && (
+                <FieldsTable
+                    selectedObject={selectedObject}
+                    selectedObjects={[selectedObject]} // Pass as array for compatibility
+                    fieldsData={fieldsData}
+                    allMetadataKeys={allMetadataKeys}
+                    objects={objects}
+                    token={token}
+                    instanceUrl={instanceUrl}
+                />
+                )}
 
-            {activeTab === "Validation Rules" && <ValidationRulesTable data={validationRules} />}
-            {activeTab === "Triggers" && <TriggersTable data={triggers} />}
-            {activeTab === "Apex Classes" && <ApexClassesTable data={apexClasses} />}
-            {activeTab === "Workflows" && <WorkflowsTable data={workflows} />}
+                {activeTab === "Field Analysis" && (
+                    <FieldAnalysisTable 
+                        fields={fieldsData[selectedObject] || []}
+                        objectName={selectedObject}
+                        token={token}
+                        instanceUrl={instanceUrl}
+                    />
+                )}
+
+                {activeTab === "Validation Rules" && (
+                    <ValidationRulesTable data={validationRules} />
+                )}
+                
+                {activeTab === "Triggers" && (
+                    <TriggersTable data={triggers} />
+                )}
+
+                {activeTab === "Apex Classes" && (
+                    <ApexClassesTable data={apexClasses} />
+                )}
+
+                {activeTab === "Workflows" && (
+                     <WorkflowsTable data={workflows} />
+                )}
+            </div>
           </>
         )}
 
-        {!selectedObject && !objectsLoading && selectedOrgId && (
-          <div className="text-center py-20 text-gray-400">
-            <p className="text-xl">Select an object to view metadata</p>
-          </div>
+        {!selectedObject && !objectsLoading && (
+           <div className="mt-10">
+               <EmptyState 
+                 title="No Object Selected"
+                 description="Select an object from the dropdown above to view its metadata, fields, and rules."
+                 icon="box"
+               />
+           </div>
         )}
       </div>
     </div>
@@ -466,27 +477,77 @@ export default function MetadataPage() {
 
 
 /* ---------------------------
- ✅ Sub-components for tables
+ ✅ Sub-components
 ----------------------------*/
 
-
-export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMetadataKeys, objects }) {
+export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMetadataKeys, objects, token, instanceUrl }) {
   const [selectedMetadata, setSelectedMetadata] = useState(["label", "ApiName", "type", "length", "description"]);
   const [typeFilter, setTypeFilter] = useState([]);
-  const [exportObjects, setExportObjects] = useState(selectedObjects);
-
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  const [selectedField, setSelectedField] = useState(null);
   const fields = fieldsData[selectedObject] || [];
+
+  useEffect(() => {
+    setSelectedField(null);
+  }, [selectedObject]);
 
   // 🔍 Get all unique field types dynamically
   const allTypes = useMemo(() => [...new Set(fields.map((f) => f.type).filter(Boolean))], [fields]);
 
-  // 🔄 Filtered fields based on selected types
+  // 🔄 Filtered fields based on selected types and search term
   const filteredFields = useMemo(() => {
-    if (typeFilter.length === 0) return fields;
-    return fields.filter((f) => typeFilter.includes(f.type));
-  }, [fields, typeFilter]);
+    let result = fields;
 
+    // Filter by type
+    if (typeFilter.length > 0) {
+      result = result.filter((f) => typeFilter.includes(f.type));
+    }
 
+    // Filter by search term
+    if (searchTerm) {
+      const lowerTerm = searchTerm.toLowerCase();
+      result = result.filter(f => 
+        (f.label && f.label.toLowerCase().includes(lowerTerm)) ||
+        (f.ApiName && f.ApiName.toLowerCase().includes(lowerTerm)) || 
+        (f.name && f.name.toLowerCase().includes(lowerTerm))
+      );
+    }
+
+    return result;
+  }, [fields, typeFilter, searchTerm]);
+
+  // Construct columns for VirtualTable based on selectedMetadata
+  const columns = useMemo(() => {
+    const widthPercentage = selectedMetadata.length > 0 ? (100 / selectedMetadata.length) : 0;
+    const cols = selectedMetadata.map(key => ({
+        label: key,
+        key: key,
+        width: `${widthPercentage}%`, 
+        render: (item) => {
+            const val = item[key];
+            
+            if (key === 'label') {
+                return (
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedField(item);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 font-medium hover:underline text-left block w-full truncate"
+                    >
+                        {val || "—"}
+                    </button>
+                );
+            }
+
+            if (val === undefined || val === null || val === "") return "—";
+            if (Array.isArray(val)) return val.join(", ");
+            return String(val);
+        }
+    }));
+    return cols;
+  }, [selectedMetadata]);
 
   const exportSelectedToCSV = (selectedObjs) => {
     if (selectedObjs.length === 0) {
@@ -496,22 +557,25 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
 
     const rows = [];
     const header = ["Object"];
-    header.push(selectedMetadata);
-    rows.push(header.join(","));
+    header.push(...selectedMetadata); // Use spread to add individual metadata keys
+    rows.push(header.map(h => `"${String(h).replace(/"/g, '""')}"`).join(",")); // Quote all headers
 
     selectedObjs.forEach((obj) => {
       const fields = fieldsData[obj];
       if (fields && fields.length > 0) {
         fields.forEach((f) => {
-          const row = [obj, f.ApiName || f.name];
+          const row = [obj];
           selectedMetadata.forEach((m) => {
-            row.push(
-              f[m] !== undefined
-                ? Array.isArray(f[m])
-                  ? `"${f[m].join("; ")}"`
-                  : `"${String(f[m]).replace(/"/g, '""')}"`
-                : ""
-            );
+            const value = f[m];
+            let formattedValue = "";
+            if (value !== undefined && value !== null) {
+                if (Array.isArray(value)) {
+                    formattedValue = value.join("; ");
+                } else {
+                    formattedValue = String(value);
+                }
+            }
+            row.push(`"${formattedValue.replace(/"/g, '""')}"`); // Quote and escape values
           });
           rows.push(row.join(","));
         });
@@ -528,10 +592,17 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
     document.body.removeChild(link);
   };
 
+
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Dropdown controls */}
-      <div className="flex flex-wrap justify-between items-center gap-6 mb-4">
+    <>
+    <div className="flex flex-col gap-4 h-full">
+      {/* Search and Filters */}
+      <FilterBar 
+        searchValue={searchTerm} 
+        onSearchChange={setSearchTerm} 
+        searchPlaceholder="Search fields..."
+      >
         {/* Metadata selection dropdown */}
         <div className="w-64">
           <SearchableDropdown
@@ -544,7 +615,6 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
           />
         </div>
 
-
         {/* Type filter dropdown */}
         <div className="w-64">
           <SearchableDropdown
@@ -556,149 +626,105 @@ export function FieldsTable({ selectedObject, selectedObjects, fieldsData, allMe
             placeholder="Select types..."
           />
         </div>
-      </div>
+      </FilterBar>
 
-      <div className="overflow-auto max-h-[70vh] border-0 rounded-xl shadow-lg bg-white scrollbar-hide scrollbar-hover">
-        <table className="min-w-full text-sm border-collapse">
-          <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-20 shadow-md h-fixed">
-            <tr className="bg-gradient-to-r from-blue-500 to-indigo-500 border-t-0">
-              {selectedMetadata.map((key) => (
-                <th key={key} className="p-3 text-center font-bold text-sm uppercase tracking-wider border-b-0 border-blue-700">
-                  {key}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="border-t-1 border-gray-200">
-            {filteredFields.map((field, idx) => (
-              <tr key={idx} className="bg-white hover:bg-blue-50/50 border-l-4 border-transparent hover:border-blue-300">
-                {selectedMetadata.map((key) => (
-                  <td key={key} className="p-4 text-center text-gray-700 font-medium">
-                    {field[key] !== undefined
-                      ? Array.isArray(field[key])
-                        ? field[key].join(", ")
-                        : String(field[key])
-                      : "—"}
-                  </td>
-                ))}
-              </tr>
-            ))}
-            {filteredFields.length === 0 && (
-              <tr>
-                <td colSpan={selectedMetadata.length} className="p-4 text-center text-gray-700 font-medium">
-                  No fields found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="flex-1 min-h-0">
+          <VirtualTable 
+            data={filteredFields}
+            columns={columns}
+            itemSize={50}
+            emptyMessage="No fields found matching your criteria."
+          />
       </div>
     </div>
+    
+    {/* Field Details Panel */}
+    {selectedField && (
+        <>
+            {/* Backdrop */}
+            <div 
+                className="fixed inset-0 bg-black/20 z-50 backdrop-blur-sm transition-opacity"
+                onClick={() => setSelectedField(null)}
+            />
+            <FieldDetailsPanel 
+                field={selectedField}
+                onClose={() => setSelectedField(null)}
+                instanceUrl={instanceUrl}
+                token={token}
+                objectName={selectedObject}
+            />
+        </>
+    )}
+    </>
   );
 }
 
 export function ValidationRulesTable({ data }) {
   if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Validation Rules found.</div>;
   return (
-    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
-      <table className="min-w-full bg-white text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Active</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Error Message</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {data.map((rule, idx) => (
-            <tr key={idx} className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium text-gray-900">{rule.fullName}</td>
-              <td className="px-6 py-4 text-gray-700">{rule.active ? "✅" : "❌"}</td>
-              <td className="px-6 py-4 text-gray-700 max-w-xs truncate" title={rule.description}>{rule.description || "—"}</td>
-              <td className="px-6 py-4 text-red-600 max-w-xs truncate" title={rule.errorMessage}>{rule.errorMessage}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <VirtualTable 
+        data={data}
+        columns={[
+            { label: "Name", key: "fullName", width: "25%" },
+            { label: "Active", key: "active", width: "10%", render: (item) => item.active ? "✅" : "❌" },
+            { label: "Description", key: "description", width: "30%", render: (item) => item.description || "—" },
+            { label: "Error Message", key: "errorMessage", width: "35%", className: "text-red-600" }
+        ]}
+        emptyMessage="No Validation Rules found."
+    />
   );
 }
 
 export function TriggersTable({ data }) {
   if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Triggers found.</div>;
   return (
-    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
-      <table className="min-w-full bg-white text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usage</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {data.map((trigger, idx) => (
-            <tr key={idx} className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium text-gray-900">{trigger.Name}</td>
-              <td className="px-6 py-4 text-gray-700">{trigger.Status}</td>
-              <td className="px-6 py-4 text-gray-700">{trigger.UsageBeforeDelete ? "Before Delete " : ""}{trigger.UsageAfterInsert ? "After Insert" : ""}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <VirtualTable 
+        data={data}
+        columns={[
+            { label: "Name", key: "Name", width: "40%" },
+            { label: "Status", key: "Status", width: "20%" },
+            { label: "Usage", key: "Usage", width: "40%", 
+              render: (item) => {
+                const usageParts = [];
+                if (item.UsageBeforeDelete) usageParts.push("Before Delete");
+                if (item.UsageAfterInsert) usageParts.push("After Insert");
+                // Add other usage types as needed
+                return usageParts.length > 0 ? usageParts.join(", ") : "—";
+              }
+            }
+        ]}
+        emptyMessage="No Triggers found."
+    />
   );
 }
 
 export function ApexClassesTable({ data }) {
   if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Apex Classes found.</div>;
   return (
-    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
-      <table className="min-w-full bg-white text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">API Version</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {data.map((cls, idx) => (
-            <tr key={idx} className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium text-gray-900">{cls.Name}</td>
-              <td className="px-6 py-4 text-gray-700">{cls.ApiVersion}</td>
-              <td className="px-6 py-4 text-gray-700">{cls.Status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <VirtualTable 
+        data={data}
+        columns={[
+            { label: "Name", key: "Name", width: "40%" },
+            { label: "API Version", key: "ApiVersion", width: "20%" },
+            { label: "Status", key: "Status", width: "40%" }
+        ]}
+        emptyMessage="No Apex Classes found."
+    />
   );
 }
 
 export function WorkflowsTable({ data }) {
   if (!data || data.length === 0) return <div className="text-center py-10 text-gray-500">No Workflows found.</div>;
   return (
-    <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm">
-      <table className="min-w-full bg-white text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trigger Type</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {data.map((wf, idx) => (
-            <tr key={idx} className="hover:bg-gray-50">
-              <td className="px-6 py-4 font-medium text-gray-900">{wf.fullName}</td>
-              <td className="px-6 py-4 text-gray-700">{wf.triggerType}</td>
-              <td className="px-6 py-4 text-gray-700">{wf.actions?.length || 0} Actions</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <VirtualTable 
+        data={data}
+        columns={[
+            { label: "Name", key: "fullName", width: "40%" },
+            { label: "Trigger Type", key: "triggerType", width: "30%" },
+            { label: "Actions", key: "actions", width: "30%", render: (item) => `${item.actions?.length || 0} Actions` }
+        ]}
+        emptyMessage="No Workflows found."
+    />
   );
 }
+

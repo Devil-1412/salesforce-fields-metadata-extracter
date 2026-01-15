@@ -8,71 +8,25 @@ import { Menu, X, LogOut, Settings, User, Sparkles, ChevronDown, Zap } from "luc
 import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 
+import { useAuth } from "../context/authContext";
+
 export default function Navbar() {
     const router = useRouter();
-    const pathname = usePathname(); // Use usePathname hook directly
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [userEmail, setUserEmail] = useState("");
-    const [fullName, setFullName] = useState(""); // Add fullName state
+    const pathname = usePathname();
+    const { isAuthenticated, user, logout } = useAuth();
     const [menuOpen, setMenuOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState(null);
     const menuRef = useRef(null);
     const profileRef = useRef(null);
 
-    const fetchProfile = async () => {
-        try {
-            // Note: Token is now in httpOnly cookie, so we don't send Authorization header
-            const res = await fetch("/api/profile", {
-                method: "POST",
-            });
-            const data = await res.json();
-            if (data.success) {
-                setIsLoggedIn(true);
-                setUserEmail(data.user.email);
-                setFullName(data.user.full_name);
-            } else {
-                setIsLoggedIn(false);
-            }
-        } catch (error) {
-            console.error("Failed to fetch profile:", error);
-            setIsLoggedIn(false);
-        }
-    };
-
     const handleLogout = async () => {
-        try {
-            await fetch("/api/logout", {
-                method: "POST",
-            });
-        } catch (error) {
-            console.error("Logout API error:", error);
-        }
-        
-        setIsLoggedIn(false);
-        setUserEmail("");
-        setFullName("");
-        router.push("/");
-        // Clean up any potential localStorage leftovers just in case, though we migrated
-        if (typeof window !== "undefined") {
-            localStorage.removeItem("token");
-            localStorage.removeItem("refresh_token");
-        }
-        window.location.reload();
+        await logout();
+        setProfileOpen(false);
     };
 
-    useEffect(() => {
-        fetchProfile();
-
-        const handleLoggedIn = (e) => {
-           fetchProfile();
-        };
-        window.addEventListener("loggedIn", handleLoggedIn);
-
-        return () => {
-            window.removeEventListener("loggedIn", handleLoggedIn);
-        };
-    }, []);
+    const fullName = user?.full_name || "";
+    const userEmail = user?.email || "";
 
     const publicNav = [
         { href: "/", label: "Home" },
@@ -130,7 +84,7 @@ export default function Navbar() {
             menu.removeEventListener("mouseleave", hide);
             clearTimeout(timer);
         };
-    }, [isLoggedIn]);
+    }, [isAuthenticated]);
 
     const handleDropdownToggle = (label) => {
         setActiveDropdown((prev) => (prev === label ? null : label));
@@ -161,7 +115,7 @@ export default function Navbar() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [menuOpen, profileOpen]);
 
-    const navLinks = isLoggedIn ? privateNav : publicNav;
+    const navLinks = isAuthenticated ? privateNav : publicNav;
 
 
     return (
@@ -280,7 +234,7 @@ export default function Navbar() {
 
                         {/* Right Section */}
                         <div className="flex items-center gap-3">
-                            {isLoggedIn ? (
+                            {isAuthenticated ? (
                                 <div className="relative" ref={profileRef} id="nav-profile-wrapper">
                                     <button
                                         onClick={() => setProfileOpen(!profileOpen)}
@@ -408,7 +362,7 @@ export default function Navbar() {
                                     </Link>
                                 );
                             })}
-                            {!isLoggedIn && (
+                            {!isAuthenticated && (
                                 <Link
                                     href="/login"
                                     onClick={() => setMenuOpen(false)}
