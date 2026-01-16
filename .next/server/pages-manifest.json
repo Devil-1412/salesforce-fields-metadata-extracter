@@ -1,8 +1,0 @@
-{
-  "/_app": "pages/_app.js",
-  "/_error": "pages/_error.js",
-  "/_document": "pages/_document.js",
-  "/api/listAllOrgs": "pages/api/listAllOrgs.js",
-  "/api/salesforceLogin": "pages/api/salesforceLogin.js",
-  "/api/objects": "pages/api/objects.js"
-}
