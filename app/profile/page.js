@@ -174,7 +174,7 @@ export default function ProfilePage() {
             const res = await fetch("/api/deleteOrg", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify({ orgId }),
             });

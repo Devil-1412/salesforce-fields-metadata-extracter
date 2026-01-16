@@ -21,7 +21,7 @@ export default async function handler(req, res) {
 
         const { orgId } = validated;
 
-        const token = req.headers.authorization?.split(" ")[1];
+        const token = getAuthToken(req);
         if (!token) {
             return res.status(401).json({ success: false, error: "Missing authentication token" });
         }
