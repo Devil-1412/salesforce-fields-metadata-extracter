@@ -1,6 +1,42 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: false, // Disabled to prevent double-invocation in dev
-  output: 'standalone'
-};
-export default nextConfig;
+import withBundleAnalyzer from '@next/bundle-analyzer';
+const isAnalyze = process.env.ANALYZE === 'true';
+
+export default withBundleAnalyzer({
+  enabled: isAnalyze,
+})({
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
+      },
+    },
+  },
+
+  webpack(config) {
+    // Add @svgr loader fallback for Webpack (if not using Turbopack)
+    config.module.rules.push({
+      test: /\.svg$/,
+      use: ['@svgr/webpack'],
+    });
+    return config;
+  },
+
+  reactStrictMode: false,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+
+  webpack(config) {
+    // Add @svgr loader fallback for Webpack (if not using Turbopack)
+    config.module.rules.push({
+      test: /\.svg$/,
+      use: ['@svgr/webpack'],
+    });
+    return config;
+  },
+});

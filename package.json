@@ -1,19 +1,30 @@
 {
   "name": "salesforce-metadata-extractor",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack --experimental-https",
     "build": "next build",
-    "start": "next start"
+    "local": "next dev",
+    "bundle:analyze": "set ANALYZE=true && next build",
+    "start": "next start",
+    "serve": "npm run build && npm start",
+    "lint": "next lint",
+    "update-mantine": "npx npm-check-updates @mantine/* @mantinex/* postcss-preset-mantine -u",
+    "json-server-home": "npx json-server -p 4000 ./src/app/api/home.json",
+    "json-server-destination": "npx json-server -p 4001 ./src/app/api/destinations.json",
+    "postbuild": "next-sitemap"
   },
   "dependencies": {
+    "@mantine/core": "^8.3.12",
+    "@mantine/hooks": "^8.3.12",
     "@supabase/supabase-js": "^2.80.0",
+    "@tabler/icons-react": "^3.36.1",
     "@tanstack/react-virtual": "^3.13.13",
-    "autoprefixer": "^10.4.14",
     "cookie": "^1.1.1",
     "jsforce": "^1.11.0",
     "lucide-react": "^0.553.0",
-    "next": "14.2.5",
+    "next": "16.0.7",
     "postcss": "^8.4.30",
     "prism-themes": "^1.9.0",
     "prismjs": "^1.30.0",
@@ -21,7 +32,22 @@
     "react-dom": "18.3.1",
     "react-hot-toast": "^2.6.0",
     "react-simple-code-editor": "^0.14.1",
-    "tailwindcss": "^3.3.3",
     "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/cookie": "^1.0.0",
+    "@types/jsforce": "^1.11.6",
+    "@types/node": "^25.0.9",
+    "@types/react": "^19.2.8",
+    "eslint": "^9",
+    "npm": "^10.5.0",
+    "eslint-config-next": "16.0.7",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
+    "prettier": "^3.8.0",
+    "typescript": "^5.9.3",
+    "@next/bundle-analyzer": "16.0.7"
   }
 }
