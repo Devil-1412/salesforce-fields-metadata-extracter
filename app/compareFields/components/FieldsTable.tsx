@@ -60,14 +60,17 @@ export default function FieldsTable({
           const currentScrollLeft = target.scrollLeft;
           const currentScrollTop = target.scrollTop;
           const lastPos = lastScrollPositionsRef.current[sourceIdx];
+          if (!lastPos) return;
 
           // Sync horizontal scroll (always)
-          if (currentScrollLeft !== lastPos?.left) {
+          if (currentScrollLeft !== lastPos.left) {
             isSyncingRef.current = true;
             tableScrollRefs.current.forEach((otherRef, otherIdx) => {
               if (otherRef && otherIdx !== sourceIdx) {
                 otherRef.scrollLeft = currentScrollLeft;
-                lastScrollPositionsRef.current[otherIdx].left = currentScrollLeft;
+                if (lastScrollPositionsRef.current[otherIdx]) {
+                  lastScrollPositionsRef.current[otherIdx].left = currentScrollLeft;
+                }
               }
             });
             lastPos.left = currentScrollLeft;
@@ -75,12 +78,14 @@ export default function FieldsTable({
           }
 
           // Sync vertical scroll (only when scroll lock enabled)
-          if (scrollLock && currentScrollTop !== lastPos?.top) {
+          if (scrollLock && currentScrollTop !== lastPos.top) {
             isSyncingRef.current = true;
             tableScrollRefs.current.forEach((otherRef, otherIdx) => {
               if (otherRef && otherIdx !== sourceIdx) {
                 otherRef.scrollTop = currentScrollTop;
-                lastScrollPositionsRef.current[otherIdx].top = currentScrollTop;
+                if (lastScrollPositionsRef.current[otherIdx]) {
+                  lastScrollPositionsRef.current[otherIdx].top = currentScrollTop;
+                }
               }
             });
             lastPos.top = currentScrollTop;

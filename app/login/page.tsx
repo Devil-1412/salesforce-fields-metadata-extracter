@@ -8,6 +8,7 @@ import {
   Checkbox,
   Container,
   Group,
+  Loader,
   Paper,
   PasswordInput,
   Stack,
@@ -19,11 +20,11 @@ import {
 import { IconLock, IconLogin } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, Suspense, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/authContext';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const { refreshUser } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -157,5 +158,26 @@ export default function LoginPage() {
         </Paper>
       </Container>
     </Box>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Loader size="lg" />
+        </Box>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

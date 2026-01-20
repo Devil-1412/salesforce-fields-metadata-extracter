@@ -117,19 +117,22 @@ export default function CompareFieldsPage() {
     comparisons.forEach((cmp) => {
       if (cmp.sourceOrg && cmp.sourceObject) {
         if (!map[cmp.sourceOrg]) map[cmp.sourceOrg] = new Set();
-        map[cmp.sourceOrg].add(cmp.sourceObject);
+        map[cmp.sourceOrg]!.add(cmp.sourceObject);
       }
       (cmp.targets || []).forEach((t) => {
         if (t.orgKey && t.objectName) {
           if (!map[t.orgKey]) map[t.orgKey] = new Set();
-          map[t.orgKey].add(t.objectName);
+          map[t.orgKey]!.add(t.objectName);
         }
       });
     });
 
     const result: Record<string, string[]> = {};
     Object.keys(map).forEach((key) => {
-      result[key] = Array.from(map[key]);
+      const set = map[key];
+      if (set) {
+        result[key] = Array.from(set);
+      }
     });
     return result;
   }, [validOrgs, comparisons]);
@@ -178,7 +181,7 @@ export default function CompareFieldsPage() {
     }
 
     if (!comparisons.some((cmp) => cmp.id === activeComparisonId)) {
-      setActiveComparisonId(comparisons[0].id);
+      setActiveComparisonId(comparisons[0]!.id);
     }
   }, [comparisons, activeComparisonId, validOrgs]);
 
@@ -469,7 +472,7 @@ export default function CompareFieldsPage() {
         ...comparison,
         targets: [
           ...comparison.targets,
-          { orgKey: validOrgs[0].instanceUrl || '', objectName: '' },
+          { orgKey: validOrgs[0]?.instanceUrl ?? '', objectName: '' },
         ],
       };
     });
@@ -569,7 +572,8 @@ export default function CompareFieldsPage() {
                     onTargetObjectChange={(targetIdx, objectName) =>
                       handleComparisonChange(comparison.id, (c) => {
                         const targets = [...c.targets];
-                        targets[targetIdx] = { ...targets[targetIdx], objectName };
+                        const existingTarget = targets[targetIdx];
+                        targets[targetIdx] = { orgKey: existingTarget?.orgKey ?? '', objectName };
                         return { ...c, targets };
                       })
                     }
