@@ -12,8 +12,7 @@
     "lint": "next lint",
     "update-mantine": "npx npm-check-updates @mantine/* @mantinex/* postcss-preset-mantine -u",
     "json-server-home": "npx json-server -p 4000 ./src/app/api/home.json",
-    "json-server-destination": "npx json-server -p 4001 ./src/app/api/destinations.json",
-    "postbuild": "next-sitemap"
+    "json-server-destination": "npx json-server -p 4001 ./src/app/api/destinations.json"
   },
   "dependencies": {
     "@mantine/core": "^8.3.12",

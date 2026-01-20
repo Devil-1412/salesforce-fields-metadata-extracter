@@ -14,12 +14,12 @@ function getClientIp(req: NextApiRequest): string {
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
     const forwardedStr = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return forwardedStr.split(',')[0].trim();
+    return forwardedStr!.split(',')[0]!.trim();
   }
 
   const realIp = req.headers['x-real-ip'];
   if (realIp) {
-    return Array.isArray(realIp) ? realIp[0] : realIp;
+    return Array.isArray(realIp) ? realIp[0]! : realIp;
   }
 
   return (req.socket as { remoteAddress?: string })?.remoteAddress || 'unknown';
