@@ -1,13 +1,13 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServiceRoleClient } from '@lib/supabaseClient';
-import jsforce from 'jsforce';
-import { encrypt } from '@lib/encryption';
-import { jsforceRateLimiter } from '@lib/rateLimiter';
-import { getAuthToken } from '@lib/cookieAuth';
-import { addOrgSchema } from '@lib/validation/schemas';
-import { validateRequestBody } from '@lib/validation/middleware';
-import { handleApiError, logError } from '@lib/errorHandler';
 import { validateContentType } from '@lib/contentTypeValidator';
+import { getAuthToken } from '@lib/cookieAuth';
+import { encrypt } from '@lib/encryption';
+import { handleApiError, logError } from '@lib/errorHandler';
+import { jsforceRateLimiter } from '@lib/rateLimiter';
+import { getServiceRoleClient } from '@lib/supabaseClient';
+import { validateRequestBody } from '@lib/validation/middleware';
+import { addOrgSchema } from '@lib/validation/schemas';
+import jsforce from 'jsforce';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface AddOrgResponse {
   success: boolean;
@@ -60,7 +60,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse<AddOrgResponse>
 
       const orgInfo = await conn.query<{ Name: string }>('SELECT Name FROM Organization LIMIT 1');
       if (orgInfo.records?.length > 0) {
-        orgName = orgInfo.records[0].Name;
+        orgName = orgInfo.records?.[0]?.Name || 'Unknown Org';
       } else {
         orgName = 'Unknown Org';
       }

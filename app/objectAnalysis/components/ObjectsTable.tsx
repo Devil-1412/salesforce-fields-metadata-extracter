@@ -1,7 +1,7 @@
 'use client';
 
 import VirtualTable from '@components/VirtualTable';
-import { Badge, Button, Stack, Text } from '@mantine/core';
+import { Button, Stack, Text } from '@mantine/core';
 
 interface SalesforceObject {
   name: string;
@@ -33,23 +33,23 @@ export default function ObjectsTable({
   formatLargeNumber,
 }: ObjectsTableProps) {
   return (
-    <VirtualTable
+    <VirtualTable<SalesforceObject>
       data={objects}
       columns={[
         {
-          key: 'index',
-          label: '#',
-          width: '10%',
-          render: (_: SalesforceObject, i: number) => i + 1,
+          accessorKey: 'index',
+          header: '#',
+          enableColumnFilter: false,
+          Cell: ({ row }: { row: { index: number } }) => row.index + 1,
         },
         {
-          key: 'label',
-          label: 'Label',
-          width: '20%',
-          render: (object: SalesforceObject) => (
+          accessorKey: 'label',
+          header: 'Label',
+          enableColumnFilter: false,
+          Cell: ({ row }: { row: { original: SalesforceObject } }) => (
             <Text
               component="button"
-              onClick={() => onObjectClick(object)}
+              onClick={() => onObjectClick(row.original)}
               style={{
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -58,85 +58,102 @@ export default function ObjectsTable({
               fw={500}
               className="hover:underline"
             >
-              {object.label || object.name}
+              {row.original.label || row.original.name}
             </Text>
           ),
         },
-        { key: 'name', label: 'API Name', width: '20%' },
         {
-          key: 'custom',
-          label: 'Type',
-          width: '10%',
-          render: (object: SalesforceObject) => (
-            <Badge size="sm" variant="light" color={object.custom ? 'blue' : 'gray'}>
-              {object.custom ? 'Custom' : 'Standard'}
-            </Badge>
+          id: 'custom',
+          accessorFn: (row) => (row.custom ? 'Custom' : 'Standard'),
+          header: 'Type',
+          filterVariant: 'multi-select',
+          Cell: ({ row }: { row: { original: SalesforceObject } }) => (
+            <Text size="xs">{row.original.custom ? 'Custom' : 'Standard'}</Text>
           ),
         },
         {
-          key: 'createdDate',
-          label: 'Created',
-          width: '15%',
-          render: (object: SalesforceObject) =>
-            object.createdDate ? (
-              <Stack gap={0}>
+          accessorKey: 'createdDate',
+          header: 'Created',
+          enableColumnFilter: false,
+          Cell: ({ row }: { row: { original: SalesforceObject } }) =>
+            row.original.createdDate ? (
+              new Date(row.original.createdDate).toLocaleDateString() === '1/1/1970' ? (
                 <Text size="xs" fw={500}>
-                  {new Date(object.createdDate).toLocaleDateString() === '1/1/1970'
-                    ? '—'
-                    : new Date(object.createdDate).toLocaleDateString()}
+                  —
                 </Text>
-                <Text size="xs" c="dimmed">
-                  {object.createdByName || 'Unknown'}
-                </Text>
-              </Stack>
+              ) : (
+                <Stack gap={0}>
+                  <Text size="xs" fw={500}>
+                    {new Date(row.original.createdDate).toLocaleDateString()}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {row.original.createdByName || 'Unknown'}
+                  </Text>
+                </Stack>
+              )
             ) : (
               <Text c="dimmed">—</Text>
             ),
         },
         {
-          key: 'lastModifiedDate',
-          label: 'Last Modified',
-          width: '15%',
-          render: (object: SalesforceObject) =>
-            object.lastModifiedDate ? (
-              <Stack gap={0}>
+          accessorKey: 'lastModifiedDate',
+          header: 'Last Modified',
+          enableColumnFilter: false,
+          Cell: ({ row }: { row: { original: SalesforceObject } }) =>
+            row.original.lastModifiedDate ? (
+              new Date(row.original.lastModifiedDate).toLocaleDateString() === '1/1/1970' ? (
                 <Text size="xs" fw={500}>
-                  {new Date(object.lastModifiedDate).toLocaleDateString() === '1/1/1970'
-                    ? '—'
-                    : new Date(object.lastModifiedDate).toLocaleDateString()}
+                  —
                 </Text>
-                <Text size="xs" c="dimmed">
-                  {object.lastModifiedByName || 'Unknown'}
-                </Text>
-              </Stack>
+              ) : (
+                <Stack gap={0}>
+                  <Text size="xs" fw={500}>
+                    {new Date(row.original.lastModifiedDate).toLocaleDateString()}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {row.original.lastModifiedByName || 'Unknown'}
+                  </Text>
+                </Stack>
+              )
             ) : (
               <Text c="dimmed">—</Text>
             ),
         },
-        { key: 'keyPrefix', label: 'Prefix', width: '10%' },
         {
-          key: 'records',
-          label: 'Records',
-          width: '10%',
-          render: (object: SalesforceObject) => (
+          accessorKey: 'keyPrefix',
+          header: 'Prefix',
+          filterVariant: 'multi-select',
+        },
+        {
+          accessorKey: 'records',
+          header: 'Records',
+          enableColumnFilter: false,
+          Cell: ({ row }: { row: { original: SalesforceObject } }) => (
             <Button
               size="xs"
               variant="light"
               radius="xl"
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
-                onFetchCount(object.name);
+                onFetchCount(row.original.name);
               }}
-              disabled={countLoadingFor === object.name}
-              loading={countLoadingFor === object.name}
+              disabled={countLoadingFor === row.original.name}
+              loading={countLoadingFor === row.original.name}
             >
-              {counts[object.name] !== undefined
-                ? formatLargeNumber(counts[object.name])
+              {counts[row.original.name] !== undefined
+                ? formatLargeNumber(counts[row.original.name])
                 : 'Get count'}
             </Button>
           ),
         },
       ]}
+      saveSettingsProps={{
+        enabled: true,
+        tableId: 'objects-table',
+      }}
+      enablePagination={false}
+      enableBottomToolbar={false}
+      enableStickyHeader={true}
     />
   );
 }

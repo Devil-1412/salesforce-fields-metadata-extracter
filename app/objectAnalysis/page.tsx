@@ -333,7 +333,7 @@ export default function ObjectAnalysisPage() {
               </Alert>
             )}
 
-            <Box mt="md" h={'80vh'} style={{ overflow: 'auto' }}>
+            <Box mt="md" style={{ overflow: 'auto' }}>
               {loading ? (
                 <Center py="xl">
                   <Loader />

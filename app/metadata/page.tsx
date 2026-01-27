@@ -1,29 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
-import {
-  Container,
-  Paper,
-  Stack,
-  Group,
-  Text,
-  Tabs,
-  Box,
-  Loader,
-  Center,
-} from '@mantine/core';
-import { IconBox } from '@tabler/icons-react';
-import SearchableDropdown from '@components/SearchableDropdown';
-import OrgHeader from '@components/OrgHeader';
 import EmptyState from '@components/EmptyState';
 import FieldAnalysisTable from '@components/FieldAnalysisTable';
+import OrgHeader from '@components/OrgHeader';
+import SearchableDropdown from '@components/SearchableDropdown';
+import { Box, Container, Group, Paper, Stack, Tabs, Text } from '@mantine/core';
+import { IconBox } from '@tabler/icons-react';
+import { useCallback, useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 
 // Co-located components
-import FieldsTable from './components/FieldsTable';
-import ValidationRulesTable from './components/ValidationRulesTable';
-import TriggersTable from './components/TriggersTable';
 import ApexClassesTable from './components/ApexClassesTable';
+import FieldsTable from './components/FieldsTable';
+import TriggersTable from './components/TriggersTable';
+import ValidationRulesTable from './components/ValidationRulesTable';
 import WorkflowsTable from './components/WorkflowsTable';
 
 interface Org {
@@ -79,29 +69,97 @@ interface Workflow {
 }
 
 const ALL_METADATA_KEYS = [
-  'label', 'ApiName', 'type', 'length', 'precision', 'scale', 'digits', 'byteLength',
-  'DBOrder', 'soapType', 'extraTypeInfo', 'defaultValue', 'defaultValueFormula',
-  'compoundFieldName', 'controllerName', 'filteredLookupInfo', 'mask', 'maskType',
-  'referenceTo', 'referenceTargetField', 'relationshipName', 'relationshipOrder',
-  'aggregatable', 'aiPredictionField', 'autoNumber', 'calculated', 'cascadeDelete',
-  'cascadeDeleteSpecified', 'caseSensitive', 'custom', 'dataTranslationEnabled',
-  'dataTranslationEnabledSpecified', 'defaultedOnCreate', 'dependentPicklist',
-  'dependentPicklistSpecified', 'deprecatedAndHidden', 'displayLocationInDecimal',
-  'displayLocationInDecimalSpecified', 'encrypted', 'encryptedSpecified', 'externalId',
-  'externalIdSpecified', 'filterable', 'formulaTreatNullNumberAsZero',
-  'formulaTreatNullNumberAsZeroSpecified', 'groupable', 'highScaleNumber',
-  'highScaleNumberSpecified', 'htmlFormatted', 'htmlFormattedSpecified', 'idLookup',
-  'nameField', 'namePointing', 'namePointingSpecified', 'permissionable',
-  'polymorphicForeignKey', 'queryByDistance', 'relationshipOrderSpecified',
-  'restrictedDelete', 'restrictedDeleteSpecified', 'restrictedPicklist',
-  'searchPrefilterable', 'sortable', 'sortableSpecified', 'unique',
-  'writeRequiresMasterRead', 'writeRequiresMasterReadSpecified',
-  'Salesforce Data Type', 'MSSQL Data Type', 'Oracle Data Type', 'MySQL Data Type',
-  'Properties', 'Nullable', 'Createable', 'Updateable', 'On Page Layout',
-  'PicklistValues', 'Category', 'Description', 'Help Text', 'Formula',
+  'label',
+  'ApiName',
+  'type',
+  'length',
+  'precision',
+  'scale',
+  'digits',
+  'byteLength',
+  'DBOrder',
+  'soapType',
+  'extraTypeInfo',
+  'defaultValue',
+  'defaultValueFormula',
+  'compoundFieldName',
+  'controllerName',
+  'filteredLookupInfo',
+  'mask',
+  'maskType',
+  'referenceTo',
+  'referenceTargetField',
+  'relationshipName',
+  'relationshipOrder',
+  'aggregatable',
+  'aiPredictionField',
+  'autoNumber',
+  'calculated',
+  'cascadeDelete',
+  'cascadeDeleteSpecified',
+  'caseSensitive',
+  'custom',
+  'dataTranslationEnabled',
+  'dataTranslationEnabledSpecified',
+  'defaultedOnCreate',
+  'dependentPicklist',
+  'dependentPicklistSpecified',
+  'deprecatedAndHidden',
+  'displayLocationInDecimal',
+  'displayLocationInDecimalSpecified',
+  'encrypted',
+  'encryptedSpecified',
+  'externalId',
+  'externalIdSpecified',
+  'filterable',
+  'formulaTreatNullNumberAsZero',
+  'formulaTreatNullNumberAsZeroSpecified',
+  'groupable',
+  'highScaleNumber',
+  'highScaleNumberSpecified',
+  'htmlFormatted',
+  'htmlFormattedSpecified',
+  'idLookup',
+  'nameField',
+  'namePointing',
+  'namePointingSpecified',
+  'permissionable',
+  'polymorphicForeignKey',
+  'queryByDistance',
+  'relationshipOrderSpecified',
+  'restrictedDelete',
+  'restrictedDeleteSpecified',
+  'restrictedPicklist',
+  'searchPrefilterable',
+  'sortable',
+  'sortableSpecified',
+  'unique',
+  'writeRequiresMasterRead',
+  'writeRequiresMasterReadSpecified',
+  'Salesforce Data Type',
+  'MSSQL Data Type',
+  'Oracle Data Type',
+  'MySQL Data Type',
+  'Properties',
+  'Nullable',
+  'Createable',
+  'Updateable',
+  'On Page Layout',
+  'PicklistValues',
+  'Category',
+  'Description',
+  'Help Text',
+  'Formula',
 ];
 
-const TABS = ['Fields', 'Field Analysis', 'Validation Rules', 'Triggers', 'Apex Classes', 'Workflows'];
+const TABS = [
+  'Fields',
+  'Field Analysis',
+  'Validation Rules',
+  'Triggers',
+  'Apex Classes',
+  'Workflows',
+];
 
 export default function MetadataPage() {
   const [activeTab, setActiveTab] = useState<string | null>('Fields');
@@ -356,7 +414,9 @@ export default function MetadataPage() {
                       value: o.name,
                     }))}
                     value={selectedObject}
-                    onChange={(val: string | string[]) => setSelectedObject(Array.isArray(val) ? val[0] || '' : val)}
+                    onChange={(val: string | string[]) =>
+                      setSelectedObject(Array.isArray(val) ? val[0] || '' : val)
+                    }
                     placeholder={objectsLoading ? 'Loading Objects...' : '— Choose Object —'}
                     disabled={!selectedOrgId || objectsLoading}
                   />
@@ -406,7 +466,7 @@ export default function MetadataPage() {
                   ))}
                 </Tabs.List>
 
-                <Box h={600}>
+                <Box>
                   <Tabs.Panel value="Fields" h="100%">
                     <FieldsTable
                       selectedObject={selectedObject}

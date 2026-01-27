@@ -1,7 +1,7 @@
 'use client';
 
-import { Text, Center } from '@mantine/core';
 import VirtualTable from '@components/VirtualTable';
+import { Center, Text } from '@mantine/core';
 
 interface ApexClass {
   Name: string;
@@ -24,12 +24,12 @@ export default function ApexClassesTable({ data }: ApexClassesTableProps) {
   }
 
   return (
-    <VirtualTable
+    <VirtualTable<ApexClass>
       data={data}
       columns={[
-        { label: 'Name', key: 'Name', width: '40%' },
-        { label: 'API Version', key: 'ApiVersion', width: '20%' },
-        { label: 'Status', key: 'Status', width: '40%' },
+        { header: 'Name', accessorKey: 'Name', size: 250 },
+        { header: 'API Version', accessorKey: 'ApiVersion', size: 120 },
+        { header: 'Status', accessorKey: 'Status', size: 200 },
       ]}
       emptyMessage="No Apex Classes found."
     />

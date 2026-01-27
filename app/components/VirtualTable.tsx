@@ -1,185 +1,282 @@
 'use client';
-
-import { Center, Paper, Table, Text } from '@mantine/core';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { useRef, type ReactNode } from 'react';
-
-interface Column<T> {
-  key: string;
-  label: string;
-  width?: string;
-  headerRender?: () => ReactNode;
-  render?: (item: T, index: number) => ReactNode;
-}
-
-interface VirtualTableProps<T extends Record<string, unknown>> {
-  columns: Column<T>[];
-  data: T[];
-  itemSize?: number;
-  rowClassName?: string;
+import { ActionIcon, Box, Center, Flex, Text, Title, Tooltip } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import {
+  IconArrowsSort,
+  IconDeviceFloppy,
+  IconRestore,
+  IconSortAscending,
+  IconSortDescending,
+} from '@tabler/icons-react';
+import {
+  MantineReactTable,
+  MRT_ColumnFiltersState,
+  MRT_ColumnOrderState,
+  MRT_ColumnPinningState,
+  MRT_ColumnSizingState,
+  MRT_DensityState,
+  MRT_ExpandedState,
+  MRT_PaginationState,
+  MRT_SortingState,
+  MRT_TableOptions,
+  MRT_TableState,
+  useMantineReactTable,
+  type MRT_ColumnDef,
+} from 'mantine-react-table';
+import 'mantine-react-table/styles.css';
+import { useEffect, useState } from 'react';
+import './VirtualTable.css';
+type Props<TData extends Record<string, any> = Record<string, any>> = MRT_TableOptions<TData> & {
+  data: TData[];
+  columns: MRT_ColumnDef<TData>[];
+  columnPinning?: { left?: string[]; right?: string[] }; // Support dynamic left & right pinning
+  density?: MRT_DensityState;
+  saveSettingsProps?: {
+    enabled: boolean;
+    tableId: string; //unique identifier for table
+  };
+  pageIndex?: number;
+  pageSize?: number;
+  title?: string;
   emptyMessage?: string;
-  className?: string;
-}
-
-export default function VirtualTable<T extends Record<string, unknown>>({
-  columns,
+};
+export default function Table<TData extends Record<string, any> = Record<string, any>>({
+  title,
   data,
-  itemSize = 50,
-  emptyMessage = 'No data available',
-  className = '',
-}: VirtualTableProps<T>) {
-  const parentRef = useRef<HTMLDivElement>(null);
-
-  const virtualizer = useVirtualizer({
-    count: data ? data.length : 0,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => itemSize,
-    overscan: 5,
-  });
-
-  if (!data || data.length === 0) {
-    return (
-      <Paper
-        withBorder
-        radius="md"
-        className={className}
-        style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
-      >
-        <Table>
-          <Table.Thead style={{ background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' }}>
-            <Table.Tr>
-              {columns.map((col) => (
-                <Table.Th
-                  key={col.key}
-                  style={{
-                    width: col.width,
-                    color: 'white',
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {col.label}
-                </Table.Th>
-              ))}
-            </Table.Tr>
-          </Table.Thead>
-        </Table>
-        <Center style={{ flex: 1, padding: '2.5rem' }}>
-          <Text c="dimmed">{emptyMessage}</Text>
-        </Center>
-      </Paper>
-    );
+  columns,
+  density = 'md',
+  pageIndex = 0,
+  pageSize = 10,
+  initialState,
+  mantineTableHeadCellProps,
+  mantineTableProps,
+  mantineTableHeadRowProps,
+  mantineTableBodyRowProps,
+  mantineTableBodyCellProps,
+  saveSettingsProps,
+  mantineTopToolbarProps,
+  ...tableProps
+}: Props<TData>) {
+  function saveSettingPropsToStorage(state: MRT_TableState<any>) {
+    if (saveSettingsProps && saveSettingsProps.enabled) {
+      const { tableId } = saveSettingsProps;
+      const tableStateKeys: (keyof MRT_TableState<any>)[] = [
+        'columnVisibility',
+        'columnOrder',
+        'columnPinning',
+        'sorting',
+        'columnFilters',
+        'grouping',
+        'expanded',
+        'density',
+        'globalFilter',
+        'columnSizing',
+      ];
+      tableStateKeys.map((key) =>
+        localStorage.setItem(`${tableId}.${key}`, JSON.stringify(state[key]))
+      );
+      notifications.show({
+        title: 'Table Settings Saved',
+        message: 'Table settings have been saved successfully.',
+        color: 'green',
+      });
+    }
   }
 
-  const items = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
+  // Initialize state from localStorage (if enabled) or initialState, falling back to empty defaults
+  const getInitialValue = <T,>(key: string, fallback: T): T => {
+    if (saveSettingsProps?.enabled) {
+      const stored = localStorage.getItem(`${saveSettingsProps.tableId}.${key}`);
+      if (stored !== null && stored !== undefined) {
+        try {
+          // Prevent JSON.parse from throwing on empty string or undefined string
+          if (stored === '' || stored === 'undefined') return fallback;
+          return JSON.parse(stored) as T;
+        } catch (e) {
+          console.error(`Error parsing stored value for ${key}:`, e);
+          // fallthrough to default
+        }
+      }
+    }
+    return (initialState as any)?.[key] ?? fallback;
+  };
 
+  const [sorting, setSorting] = useState<MRT_SortingState>(() => getInitialValue('sorting', []));
+  const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(() =>
+    getInitialValue('columnFilters', [])
+  );
+  const [columnOrder, setColumnOrder] = useState<MRT_ColumnOrderState>(() =>
+    getInitialValue('columnOrder', [])
+  );
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() =>
+    getInitialValue('columnVisibility', {})
+  );
+  const [columnPinning, setColumnPinning] = useState<MRT_ColumnPinningState>(() =>
+    getInitialValue('columnPinning', {})
+  );
+  const [columnSizing, setColumnSizing] = useState<MRT_ColumnSizingState>(() =>
+    getInitialValue('columnSizing', {})
+  );
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: pageIndex,
+    pageSize: pageSize,
+  });
+  const [expanded, setExpanded] = useState<MRT_ExpandedState>({});
+
+  const table = useMantineReactTable({
+    columns: columns,
+    data: data || [],
+    enableColumnPinning: true,
+    state: {
+      sorting,
+      columnFilters,
+      columnOrder,
+      columnVisibility,
+      columnPinning,
+      columnSizing,
+      pagination,
+      expanded,
+    },
+    onSortingChange: (sorting) => {
+      setSorting(sorting);
+    },
+    onColumnFiltersChange: (columnFilters) => {
+      setColumnFilters(columnFilters);
+    },
+    onColumnOrderChange: (columnOrder) => {
+      setColumnOrder(columnOrder);
+    },
+    onColumnVisibilityChange: (columnVisibility) => {
+      setColumnVisibility(columnVisibility);
+    },
+    onColumnPinningChange: (columnPinning) => {
+      setColumnPinning(columnPinning);
+    },
+    onColumnSizingChange: (columnSizing) => {
+      setColumnSizing(columnSizing);
+    },
+    onPaginationChange: (pagination) => {
+      setPagination(pagination);
+    },
+    onExpandedChange: (expanded) => {
+      setExpanded(expanded);
+    },
+    mantinePaperProps: {
+      shadow: 'sm',
+      radius: 'md',
+      withBorder: true,
+    },
+    mantineTableHeadRowProps: {
+      style: {
+        position: 'sticky',
+        top: 0,
+        backgroundColor: 'var(--mantine-color-gray-0)',
+        zIndex: 100,
+      },
+    },
+    mantineTableHeadCellProps: {
+      style: {
+        fontWeight: 600,
+        color: 'var(--mantine-color-text)',
+        backgroundColor: 'var(--mantine-color-gray-0)',
+        textTransform: 'uppercase',
+        fontSize: 'var(--mantine-font-size-xs)',
+        borderTop: '2px solid var(--mantine-color-gray-2)',
+      },
+      ...mantineTableHeadCellProps,
+    },
+    mantineTableContainerProps: {
+      style: {
+        height: '70vh',
+      },
+    },
+    mantineTableProps: {
+      striped: 'odd',
+      highlightOnHover: true,
+      withTableBorder: false, // Paper handles the border
+      withColumnBorders: true,
+      ...mantineTableProps,
+    },
+    mantineTopToolbarProps: {
+      style: {
+        padding: '0.5rem',
+      },
+      ...mantineTopToolbarProps,
+    },
+    mantineColumnActionsButtonProps: {
+      style: { justifySelf: 'end', alignContent: 'end', background: 'transparent' },
+    },
+    enableStickyHeader: true,
+    enableFullScreenToggle: true,
+    enableDensityToggle: true,
+    enableColumnResizing: true,
+    enableColumnOrdering: true,
+    enableFacetedValues: true,
+    enableRowVirtualization: true,
+    enableColumnVirtualization: true,
+    enablePagination: false,
+    enableBottomToolbar: false,
+    ...(saveSettingsProps?.enabled && {
+      renderTopToolbarCustomActions: () => (
+        <Flex gap="xs" align="center">
+          <Tooltip label="Save Settings">
+            <ActionIcon
+              variant="default"
+              size="lg"
+              radius="md"
+              onClick={() => {
+                const state = table.getState();
+                saveSettingPropsToStorage(state);
+              }}
+              aria-label="Save Settings"
+            >
+              <IconDeviceFloppy size={18} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Reset Settings">
+            <ActionIcon
+              variant="default"
+              size="lg"
+              radius="md"
+              onClick={() => {
+                localStorage.removeItem(`${saveSettingsProps.tableId}`);
+                table.reset();
+              }}
+              aria-label="Reset Settings"
+            >
+              <IconRestore size={18} />
+            </ActionIcon>
+          </Tooltip>
+        </Flex>
+      ),
+    }),
+    renderEmptyRowsFallback: () => (
+      <Center p="xl">
+        <Text c="dimmed">{tableProps.emptyMessage || 'No records to display'}</Text>
+      </Center>
+    ),
+    icons: {
+      IconSortAscending: () => <IconSortAscending size={16} stroke={1.5} color="black" />,
+      IconSortDescending: () => <IconSortDescending size={16} stroke={1.5} color="black" />,
+      IconArrowsSort: () => <IconArrowsSort size={16} stroke={1.5} color="black" />,
+    },
+    ...tableProps,
+  });
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  if (!hydrated) return null; // or a loader
   return (
-    <Paper
-      ref={parentRef}
-      withBorder
-      radius="md"
-      className={className}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        overflow: 'auto',
-      }}
-    >
-      <Table style={{ minWidth: '100%', borderCollapse: 'collapse' }}>
-        <Table.Thead
-          style={{
-            background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-          }}
-        >
-          <Table.Tr style={{ display: 'flex', width: '100%' }}>
-            {columns.map((col) => (
-              <Table.Th
-                key={col.key}
-                style={{
-                  width: col.width,
-                  color: 'white',
-                  fontWeight: 600,
-                  padding: '0.75rem 1.5rem',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                {col.headerRender ? col.headerRender() : col.label}
-              </Table.Th>
-            ))}
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody
-          style={{
-            display: 'block',
-            width: '100%',
-            height: `${totalSize}px`,
-            position: 'relative',
-          }}
-        >
-          {items.map((virtualRow) => {
-            const item = data[virtualRow.index];
-            if (!item) return null;
-            return (
-              <Table.Tr
-                key={virtualRow.key}
-                data-index={virtualRow.index}
-                ref={virtualizer.measureElement}
-                style={{
-                  display: 'flex',
-                  width: '100%',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  transform: `translateY(${virtualRow.start}px)`,
-                  borderBottom: '1px solid var(--mantine-color-gray-2)',
-                }}
-              >
-                {columns.map((col) => (
-                  <Table.Td
-                    key={col.key}
-                    style={{
-                      width: col.width,
-                      padding: '0.75rem 1.5rem',
-                      flexShrink: 0,
-                      verticalAlign: 'top',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {col.render
-                      ? col.render(item, virtualRow.index)
-                      : item[col.key] !== undefined
-                        ? Array.isArray(item[col.key])
-                          ? (item[col.key] as unknown[]).join(', ')
-                          : String(item[col.key])
-                        : '—'}
-                  </Table.Td>
-                ))}
-              </Table.Tr>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
-      <div
-        style={{
-          position: 'sticky',
-          bottom: 0,
-          backgroundColor: 'var(--mantine-color-gray-0)',
-          borderTop: '1px solid var(--mantine-color-gray-2)',
-          padding: '0.5rem 1rem',
-          textAlign: 'center',
-          fontSize: '0.75rem',
-          color: 'var(--mantine-color-gray-6)',
-          zIndex: 10,
-        }}
-      >
-        Showing {data.length} items
-      </div>
-    </Paper>
+    <Box style={{ overflowX: 'auto', maxWidth: '100%' }}>
+      {title && (
+        <Title order={3} mb="10" mt="30">
+          {title}
+        </Title>
+      )}
+      <MantineReactTable table={table} />
+    </Box>
   );
 }

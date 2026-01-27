@@ -1,0 +1,20 @@
+/* Pin table header row */
+.MRT_TableHeadRow {
+  position: sticky !important;
+  top: 0;
+  background-color: white;
+  z-index: 100;
+}
+
+/* Ensure individual group headers don’t scroll */
+.MRT_TableHeadCell {
+  position: sticky !important;
+  left: 0;
+  background-color: white;
+  z-index: 110;
+}
+
+/* Fix width issues */
+.MRT_TableHeadCell-content {
+  white-space: nowrap;
+}

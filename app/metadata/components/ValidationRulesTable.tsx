@@ -1,7 +1,7 @@
 'use client';
 
-import { Text, Center } from '@mantine/core';
 import VirtualTable from '@components/VirtualTable';
+import { Center, Text } from '@mantine/core';
 
 interface ValidationRule {
   fullName: string;
@@ -25,26 +25,27 @@ export default function ValidationRulesTable({ data }: ValidationRulesTableProps
   }
 
   return (
-    <VirtualTable
+    <VirtualTable<ValidationRule>
       data={data}
       columns={[
-        { label: 'Name', key: 'fullName', width: '25%' },
+        { header: 'Name', accessorKey: 'fullName', size: 200 },
         {
-          label: 'Active',
-          key: 'active',
-          width: '10%',
-          render: (item: ValidationRule) => (item.active ? '✅' : '❌'),
+          header: 'Active',
+          accessorKey: 'active',
+          size: 80,
+          Cell: ({ row }: { row: { original: ValidationRule } }) =>
+            row.original.active ? '✅' : '❌',
         },
         {
-          label: 'Description',
-          key: 'description',
-          width: '30%',
-          render: (item: ValidationRule) => item.description || '—',
+          header: 'Description',
+          accessorKey: 'description',
+          size: 250,
+          Cell: ({ row }: { row: { original: ValidationRule } }) => row.original.description || '—',
         },
         {
-          label: 'Error Message',
-          key: 'errorMessage',
-          width: '35%',
+          header: 'Error Message',
+          accessorKey: 'errorMessage',
+          size: 300,
         },
       ]}
       emptyMessage="No Validation Rules found."

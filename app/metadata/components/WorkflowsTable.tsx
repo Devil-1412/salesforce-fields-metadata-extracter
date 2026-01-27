@@ -1,7 +1,7 @@
 'use client';
 
-import { Text, Center } from '@mantine/core';
 import VirtualTable from '@components/VirtualTable';
+import { Center, Text } from '@mantine/core';
 
 interface Workflow {
   fullName: string;
@@ -24,16 +24,17 @@ export default function WorkflowsTable({ data }: WorkflowsTableProps) {
   }
 
   return (
-    <VirtualTable
+    <VirtualTable<Workflow>
       data={data}
       columns={[
-        { label: 'Name', key: 'fullName', width: '40%' },
-        { label: 'Trigger Type', key: 'triggerType', width: '30%' },
+        { header: 'Name', accessorKey: 'fullName', size: 250 },
+        { header: 'Trigger Type', accessorKey: 'triggerType', size: 150 },
         {
-          label: 'Actions',
-          key: 'actions',
-          width: '30%',
-          render: (item: Workflow) => `${item.actions?.length || 0} Actions`,
+          header: 'Actions',
+          accessorKey: 'actions',
+          size: 150,
+          Cell: ({ row }: { row: { original: Workflow } }) =>
+            `${(row.original.actions as any[])?.length || 0} Actions`,
         },
       ]}
       emptyMessage="No Workflows found."

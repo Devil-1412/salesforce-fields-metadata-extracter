@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Stack, Group, Box } from '@mantine/core';
+import FieldDetailsPanel from '@components/FieldDetailsPanel';
 import SearchableDropdown from '@components/SearchableDropdown';
 import VirtualTable from '@components/VirtualTable';
-import FilterBar from '@components/FilterBar';
-import FieldDetailsPanel from '@components/FieldDetailsPanel';
+import { Box, Stack, Text } from '@mantine/core';
+import { useEffect, useMemo, useState } from 'react';
 
 interface Field {
   label?: string;
@@ -87,27 +86,32 @@ export default function FieldsTable({
   }, [fields, typeFilter, searchTerm]);
 
   // Construct columns for VirtualTable based on selectedMetadata
-  const columns = useMemo(() => {
-    const widthPercentage =
-      selectedMetadata.length > 0 ? 100 / selectedMetadata.length : 0;
+  const columns = useMemo<any[]>(() => {
     return selectedMetadata.map((key) => ({
-      label: key,
-      key: key,
-      width: `${widthPercentage}%`,
-      render: (item: Field) => {
+      id: key,
+      accessorFn: (row: Field) => {
+        const val = row[key];
+        if (val === undefined || val === null) return '';
+        return String(val);
+      },
+      header: key,
+      filterVariant: 'multi-select',
+      Cell: ({ row }: { row: { original: Field } }) => {
+        const item = row.original;
         const val = item[key];
 
         if (key === 'label') {
           return (
-            <button
+            <Text
+              c={'blue'}
+              style={{ cursor: 'pointer' }}
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedField(item);
               }}
-              className="text-blue-600 hover:text-blue-800 font-medium hover:underline text-left block w-full truncate"
             >
               {(val as string) || '—'}
-            </button>
+            </Text>
           );
         }
 
@@ -127,9 +131,7 @@ export default function FieldsTable({
     const rows: string[] = [];
     const header = ['Object'];
     header.push(...selectedMetadata);
-    rows.push(
-      header.map((h) => `"${String(h).replace(/"/g, '""')}"`).join(',')
-    );
+    rows.push(header.map((h) => `"${String(h).replace(/"/g, '""')}"`).join(','));
 
     selectedObjs.forEach((obj) => {
       const objFields = fieldsData[obj];
@@ -166,42 +168,25 @@ export default function FieldsTable({
   return (
     <>
       <Stack gap="md" h="100%">
-        <FilterBar
-          searchValue={searchTerm}
-          onSearchChange={setSearchTerm}
-          searchPlaceholder="Search fields..."
-        >
-          <Group>
-            <Box w={250}>
-              <SearchableDropdown
-                label="Metadata Columns"
-                options={allMetadataKeys.map((k) => ({ label: k, value: k }))}
-                value={selectedMetadata}
-                onChange={(val: string | string[]) => setSelectedMetadata(Array.isArray(val) ? val : [val])}
-                multiple={true}
-                placeholder="Select columns..."
-              />
-            </Box>
-
-            <Box w={250}>
-              <SearchableDropdown
-                label="Filter by Field Type"
-                options={allTypes.map((t) => ({ label: t, value: t }))}
-                value={typeFilter}
-                onChange={(val: string | string[]) => setTypeFilter(Array.isArray(val) ? val : [val])}
-                multiple={true}
-                placeholder="Select types..."
-              />
-            </Box>
-          </Group>
-        </FilterBar>
+        <Box w={'100%'}>
+          <SearchableDropdown
+            label="Metadata Columns"
+            options={allMetadataKeys.map((k) => ({ label: k, value: k }))}
+            value={selectedMetadata}
+            onChange={(val: string | string[]) =>
+              setSelectedMetadata(Array.isArray(val) ? val : [val])
+            }
+            multiple={true}
+            placeholder="Select columns..."
+          />
+        </Box>
 
         <Box style={{ flex: 1, minHeight: 0 }}>
           <VirtualTable
             data={filteredFields}
             columns={columns}
-            itemSize={50}
             emptyMessage="No fields found matching your criteria."
+            enableTopToolbar={true}
           />
         </Box>
       </Stack>

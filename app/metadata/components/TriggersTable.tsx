@@ -1,7 +1,7 @@
 'use client';
 
-import { Text, Center } from '@mantine/core';
 import VirtualTable from '@components/VirtualTable';
+import { Center, Text } from '@mantine/core';
 
 interface Trigger {
   Name: string;
@@ -25,16 +25,17 @@ export default function TriggersTable({ data }: TriggersTableProps) {
   }
 
   return (
-    <VirtualTable
+    <VirtualTable<Trigger>
       data={data}
       columns={[
-        { label: 'Name', key: 'Name', width: '40%' },
-        { label: 'Status', key: 'Status', width: '20%' },
+        { header: 'Name', accessorKey: 'Name', size: 250 },
+        { header: 'Status', accessorKey: 'Status', size: 120 },
         {
-          label: 'Usage',
-          key: 'Usage',
-          width: '40%',
-          render: (item: Trigger) => {
+          header: 'Usage',
+          accessorKey: 'Usage',
+          size: 250,
+          Cell: ({ row }: { row: { original: Trigger } }) => {
+            const item = row.original;
             const usageParts: string[] = [];
             if (item.UsageBeforeDelete) usageParts.push('Before Delete');
             if (item.UsageAfterInsert) usageParts.push('After Insert');

@@ -2,10 +2,12 @@
 import '@mantine/core/styles.css';
 import './globals.css';
 
-import { ColorSchemeScript, MantineProvider, createTheme, Container, Box, Flex } from '@mantine/core';
-import Navbar from './components/Navbar';
-import Footer from './components/Footer';
+import { ColorSchemeScript, Container, Flex, MantineProvider, createTheme } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
+import '@mantine/notifications/styles.css';
 import AuthSessionLayer from './components/AuthSessionLayer';
+import Footer from './components/Footer';
+import Navbar from './components/Navbar';
 import { AuthProvider } from './context/authContext';
 
 export const metadata = {
@@ -54,6 +56,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       </head>
       <body>
         <MantineProvider theme={theme} defaultColorScheme="light">
+          <Notifications />
           <AuthProvider>
             <AuthSessionLayer />
             <Flex display="flex" direction="column" mih="100vh">

@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import jsforce from 'jsforce';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface FieldAnalysisResponse {
   success: boolean;
@@ -51,14 +51,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse<FieldAnalysisRe
   }
 }
 
-async function getNullCount(conn: jsforce.Connection, objectName: string): Promise<Record<string, string | number>> {
+async function getNullCount(
+  conn: jsforce.Connection,
+  objectName: string
+): Promise<Record<string, string | number>> {
   const describe = await conn.sobject(objectName).describe();
   const counts: Record<string, string | number> = {};
 
   for (const f of describe.fields) {
     if (f.name === 'Id') continue;
     try {
-      const result = await conn.query<{ c: number }>(`SELECT COUNT(Id) c FROM ${objectName} WHERE ${f.name} = null`);
+      const result = await conn.query<{ c: number }>(
+        `SELECT COUNT(Id) c FROM ${objectName} WHERE ${f.name} = null`
+      );
       counts[f.name] = result.records?.[0]?.c || 0;
     } catch {
       counts[f.name] = 'N/A';
@@ -68,14 +73,19 @@ async function getNullCount(conn: jsforce.Connection, objectName: string): Promi
   return counts;
 }
 
-async function getFieldCount(conn: jsforce.Connection, objectName: string): Promise<Record<string, string | number>> {
+async function getFieldCount(
+  conn: jsforce.Connection,
+  objectName: string
+): Promise<Record<string, string | number>> {
   const describe = await conn.sobject(objectName).describe();
   const counts: Record<string, string | number> = {};
 
   for (const f of describe.fields) {
     if (f.name === 'Id') continue;
     try {
-      const result = await conn.query<{ c: number }>(`SELECT COUNT(Id) c FROM ${objectName} WHERE ${f.name} != null`);
+      const result = await conn.query<{ c: number }>(
+        `SELECT COUNT(Id) c FROM ${objectName} WHERE ${f.name} != null`
+      );
       counts[f.name] = result.records?.[0]?.c || 0;
     } catch {
       counts[f.name] = 'N/A';
@@ -85,16 +95,21 @@ async function getFieldCount(conn: jsforce.Connection, objectName: string): Prom
   return counts;
 }
 
-async function getPercentPresent(conn: jsforce.Connection, objectName: string): Promise<Record<string, string>> {
+async function getPercentPresent(
+  conn: jsforce.Connection,
+  objectName: string
+): Promise<Record<string, string>> {
   const describe = await conn.sobject(objectName).describe();
   const totalRes = await conn.query<{ total: number }>(`SELECT COUNT(Id) total FROM ${objectName}`);
-  const total = totalRes.records[0].total;
+  const total = totalRes?.records?.[0]?.total || 0;
   const completeness: Record<string, string> = {};
 
   for (const f of describe.fields) {
     if (f.name === 'Id') continue;
     try {
-      const result = await conn.query<{ c: number }>(`SELECT COUNT(Id) c FROM ${objectName} WHERE ${f.name} != null`);
+      const result = await conn.query<{ c: number }>(
+        `SELECT COUNT(Id) c FROM ${objectName} WHERE ${f.name} != null`
+      );
       const filled = result.records?.[0]?.c || 0;
       completeness[f.name] = ((filled / total) * 100).toFixed(2) + '%';
     } catch {
@@ -105,14 +120,19 @@ async function getPercentPresent(conn: jsforce.Connection, objectName: string): 
   return completeness;
 }
 
-async function getDistinctCount(conn: jsforce.Connection, objectName: string): Promise<Record<string, string | number>> {
+async function getDistinctCount(
+  conn: jsforce.Connection,
+  objectName: string
+): Promise<Record<string, string | number>> {
   const describe = await conn.sobject(objectName).describe();
   const distinctCounts: Record<string, string | number> = {};
 
   for (const f of describe.fields) {
     if (f.name === 'Id') continue;
     try {
-      const result = await conn.query<{ d: number }>(`SELECT COUNT_DISTINCT(${f.name}) d FROM ${objectName}`);
+      const result = await conn.query<{ d: number }>(
+        `SELECT COUNT_DISTINCT(${f.name}) d FROM ${objectName}`
+      );
       distinctCounts[f.name] = result.records?.[0]?.d || 0;
     } catch {
       distinctCounts[f.name] = 'N/A';
@@ -122,7 +142,10 @@ async function getDistinctCount(conn: jsforce.Connection, objectName: string): P
   return distinctCounts;
 }
 
-async function getSampleValues(conn: jsforce.Connection, objectName: string): Promise<Record<string, string | null>> {
+async function getSampleValues(
+  conn: jsforce.Connection,
+  objectName: string
+): Promise<Record<string, string | null>> {
   try {
     const desc = await conn.sobject(objectName).describe();
     const allFields = desc.fields.map((f) => f.name);
@@ -142,7 +165,9 @@ async function getSampleValues(conn: jsforce.Connection, objectName: string): Pr
 
     for (const fields of fieldChunks) {
       try {
-        const result = await conn.query<Record<string, unknown>>(`SELECT ${fields.join(', ')} FROM ${objectName} LIMIT 1`);
+        const result = await conn.query<Record<string, unknown>>(
+          `SELECT ${fields.join(', ')} FROM ${objectName} LIMIT 1`
+        );
         const record = result.records?.[0] || {};
 
         for (const f of fields) {
@@ -160,9 +185,11 @@ async function getSampleValues(conn: jsforce.Connection, objectName: string): Pr
     for (const f of Object.keys(sampleValues)) {
       if (sampleValues[f] === null) {
         try {
-          const result = await conn.query<Record<string, unknown>>(`SELECT ${f} FROM ${objectName} WHERE ${f} != NULL LIMIT 1`);
+          const result = await conn.query<Record<string, unknown>>(
+            `SELECT ${f} FROM ${objectName} WHERE ${f} != NULL LIMIT 1`
+          );
           if (result.records && result.records.length > 0) {
-            const val = result.records[0][f];
+            const val = result?.records?.[0]?.[f];
             sampleValues[f] = val === null || val === undefined ? 'N/A' : String(val);
           } else {
             sampleValues[f] = 'N/A';

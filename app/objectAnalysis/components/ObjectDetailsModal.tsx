@@ -1,23 +1,23 @@
 'use client';
 
-import { IconX, IconCheck } from '@tabler/icons-react';
-import {
-  Modal,
-  Title,
-  Text,
-  Badge,
-  Group,
-  Stack,
-  Grid,
-  Paper,
-  Code,
-  Button,
-  Box,
-  ScrollArea,
-  Flex,
-  ThemeIcon,
-} from '@mantine/core';
 import VirtualTable from '@components/VirtualTable';
+import {
+  Badge,
+  Box,
+  Button,
+  Code,
+  Flex,
+  Grid,
+  Group,
+  Modal,
+  Paper,
+  ScrollArea,
+  Stack,
+  Text,
+  ThemeIcon,
+  Title,
+} from '@mantine/core';
+import { IconCheck, IconX } from '@tabler/icons-react';
 
 interface RecordTypeInfo {
   recordTypeId: string;
@@ -81,21 +81,14 @@ function BooleanFlag({ label, value }: BooleanFlagProps) {
       withBorder
       bg={value ? 'green.0' : 'gray.0'}
       style={{
-        borderColor: value
-          ? 'var(--mantine-color-green-2)'
-          : 'var(--mantine-color-gray-2)',
+        borderColor: value ? 'var(--mantine-color-green-2)' : 'var(--mantine-color-gray-2)',
       }}
     >
       <Flex justify="space-between" align="center">
         <Text size="sm" fw={500}>
           {label}
         </Text>
-        <ThemeIcon
-          size="sm"
-          radius="xl"
-          variant="light"
-          color={value ? 'green' : 'gray'}
-        >
+        <ThemeIcon size="sm" radius="xl" variant="light" color={value ? 'green' : 'gray'}>
           {value ? <IconCheck size={14} /> : <IconX size={14} />}
         </ThemeIcon>
       </Flex>
@@ -103,10 +96,7 @@ function BooleanFlag({ label, value }: BooleanFlagProps) {
   );
 }
 
-export default function ObjectDetailsModal({
-  object,
-  onClose,
-}: ObjectDetailsModalProps) {
+export default function ObjectDetailsModal({ object, onClose }: ObjectDetailsModalProps) {
   return (
     <Modal
       opened={true}
@@ -116,10 +106,7 @@ export default function ObjectDetailsModal({
       title={
         <Group gap="sm">
           <Title order={3}>{object.label}</Title>
-          <Badge
-            variant="light"
-            color={object.custom ? 'blue' : 'gray'}
-          >
+          <Badge variant="light" color={object.custom ? 'blue' : 'gray'}>
             {object.custom ? 'Custom Object' : 'Standard Object'}
           </Badge>
         </Group>
@@ -207,9 +194,7 @@ export default function ObjectDetailsModal({
                         <Text size="sm" fw={600} w={150} tt="capitalize">
                           {key.replace(/([A-Z])/g, ' $1').trim()}
                         </Text>
-                        <Code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>
-                          {url}
-                        </Code>
+                        <Code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>{url}</Code>
                       </Group>
                     </Box>
                   ))}
@@ -249,10 +234,7 @@ export default function ObjectDetailsModal({
                           <Text size="xs" c="dimmed">
                             Default:
                           </Text>
-                          <Text
-                            size="xs"
-                            c={rt.defaultRecordTypeMapping ? 'green' : 'dimmed'}
-                          >
+                          <Text size="xs" c={rt.defaultRecordTypeMapping ? 'green' : 'dimmed'}>
                             {rt.defaultRecordTypeMapping ? 'Yes' : 'No'}
                           </Text>
                         </Group>
@@ -278,13 +260,7 @@ export default function ObjectDetailsModal({
               </Text>
               <Flex wrap="wrap" gap="xs">
                 {object.supportedScopes.map((scope) => (
-                  <Badge
-                    key={scope.name}
-                    variant="light"
-                    color="indigo"
-                    size="lg"
-                    radius="md"
-                  >
+                  <Badge key={scope.name} variant="light" color="indigo" size="lg" radius="md">
                     {scope.label} | {scope.name}
                   </Badge>
                 ))}
@@ -298,28 +274,29 @@ export default function ObjectDetailsModal({
               <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="sm">
                 Child Relationships
               </Text>
-              <VirtualTable
+              <VirtualTable<ChildRelationship>
                 data={object.childRelationships}
                 columns={[
-                  { label: 'Child Object', key: 'childSObject', width: '25%' },
-                  { label: 'Field', key: 'field', width: '25%' },
+                  { header: 'Child Object', accessorKey: 'childSObject', size: 200 },
+                  { header: 'Field', accessorKey: 'field', size: 200 },
                   {
-                    label: 'Relationship Name',
-                    key: 'relationshipName',
-                    width: '25%',
-                    render: (item: ChildRelationship) => item.relationshipName || '-',
+                    header: 'Relationship Name',
+                    accessorKey: 'relationshipName',
+                    size: 200,
+                    Cell: ({ row }: { row: { original: ChildRelationship } }) =>
+                      row.original.relationshipName || '-',
                   },
                   {
-                    label: 'Cascade Delete',
-                    key: 'cascadeDelete',
-                    width: '25%',
-                    render: (item: ChildRelationship) => (
+                    header: 'Cascade Delete',
+                    accessorKey: 'cascadeDelete',
+                    size: 150,
+                    Cell: ({ row }: { row: { original: ChildRelationship } }) => (
                       <Badge
                         size="sm"
                         variant="light"
-                        color={item.cascadeDelete ? 'green' : 'gray'}
+                        color={row.original.cascadeDelete ? 'green' : 'gray'}
                       >
-                        {item.cascadeDelete ? 'Yes' : 'No'}
+                        {row.original.cascadeDelete ? 'Yes' : 'No'}
                       </Badge>
                     ),
                   },

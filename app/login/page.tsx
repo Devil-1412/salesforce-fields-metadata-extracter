@@ -5,8 +5,8 @@ import {
   Box,
   Button,
   Center,
-  Checkbox,
   Container,
+  Divider,
   Group,
   Loader,
   Paper,
@@ -22,7 +22,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
 import toast from 'react-hot-toast';
+import { GoogleIcon } from '../components/GoogleIcon';
 import { useAuth } from '../context/authContext';
+import { supabase } from '../utils/supabase';
 
 function LoginForm() {
   const router = useRouter();
@@ -131,7 +133,6 @@ function LoginForm() {
               <PasswordInput name="password" label="Password" placeholder="••••••••" required />
 
               <Group justify="space-between">
-                <Checkbox label="Remember me" size="xs" />
                 <Anchor component={Link} href="#" size="xs">
                   Forgot password?
                 </Anchor>
@@ -145,6 +146,31 @@ function LoginForm() {
                 size="md"
               >
                 {loading ? 'Connecting to Salesforce...' : 'Sign In'}
+              </Button>
+
+              <Divider label="Or continue with" labelPosition="center" my="sm" />
+
+              <Button
+                fullWidth
+                variant="default"
+                c="gray"
+                leftSection={<GoogleIcon />}
+                onClick={async () => {
+                  try {
+                    const { error } = await supabase.auth.signInWithOAuth({
+                      provider: 'google',
+                      options: {
+                        redirectTo: `${window.location.origin}/auth/callback`,
+                      },
+                    });
+                    if (error) throw error;
+                  } catch (error) {
+                    console.error('Google login error:', error);
+                    toast.error('Could not initiate Google Login');
+                  }
+                }}
+              >
+                Login with Google
               </Button>
             </Stack>
           </form>
