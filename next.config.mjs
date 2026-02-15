@@ -24,9 +24,6 @@ export default withBundleAnalyzer({
   },
 
   reactStrictMode: false,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },

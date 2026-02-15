@@ -1,6 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import jsforce from 'jsforce';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface SObject {
   name: string;
@@ -29,12 +30,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse<ObjectsResponse
   const { accessToken, instanceUrl } = req.body;
 
   try {
-    const conn = new jsforce.Connection({ accessToken, instanceUrl });
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
     const describe = await conn.describeGlobal();
 
     let metadataList: jsforce.FileProperties[] | jsforce.FileProperties = [];
     try {
-      metadataList = await conn.metadata.list([{ type: 'CustomObject', folder: undefined }], '60.0');
+      metadataList = await conn.metadata.list(
+        [{ type: 'CustomObject', folder: undefined }],
+        '60.0'
+      );
       if (metadataList && !Array.isArray(metadataList)) {
         metadataList = [metadataList];
       }

@@ -1,12 +1,13 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import React, {
+import {
   createContext,
   ReactNode,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -31,23 +32,29 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+import useUserAuthStore from '../../lib/store/userAuthStore';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
+  // Zustand Store Actions
+  const {
+    login: storeLogin,
+    logout: storeLogout,
+    setUser: storeSetUser,
+    clearAuth: storeClearAuth,
+  } = useUserAuthStore();
+
   // Inactivity timeout (30 minutes in milliseconds)
   const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
   // Token refresh threshold (12 minutes - refresh before 15 min expiry)
   const REFRESH_INTERVAL = 12 * 60 * 1000;
 
-  // Use refs for timers to avoid dependency loops if we needed to access them in effects,
-  // but here we just use closure variables or state if needed.
-  // Actually, for global singletons in React, refs are better than local vars if re-renders happen.
-  // Converting to refs to be safe across renders.
-  const inactivityTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const refreshTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Logout function
   const logout = useCallback(
@@ -68,13 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(false);
       setUser(null);
 
+      // SYNC: Clear Zustand Store
+      storeLogout();
+
       if (sessionExpired) {
         router.push('/login?expired=true');
       } else {
         router.push('/login');
       }
     },
-    [router]
+    [router, storeLogout]
   );
 
   // Handle session expiration
@@ -134,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, REFRESH_INTERVAL);
   }, [refreshToken, REFRESH_INTERVAL]);
 
-  // Function to manually refresh user data (e.g. after profile update)
+  // Function to manually refresh user data
   const refreshUser = useCallback(async () => {
     try {
       const response = await fetch('/api/profile', {
@@ -146,19 +156,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok && data.success) {
         setUser(data.user);
         setIsAuthenticated(true);
+
+        // SYNC: Update Zustand Store
+        // We might need to map 'data.user' to 'UserProfile' if they differ,
+        // but for now passing as is or fetching profile separately in store
+        // The store handles profile fetching via its own refreshProfile,
+        // but here we set the basic User object.
+        storeSetUser(data.user);
+
         return data.user;
       }
     } catch (error) {
       console.error('Refresh user error:', error);
     }
     return null;
-  }, []);
+  }, [storeSetUser]);
 
-  // Check authentication status on mount
+  // Check authentication on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Try to call a protected endpoint to verify authentication
         const response = await fetch('/api/profile', {
           method: 'POST',
           credentials: 'include',
@@ -167,28 +184,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (response.ok && data.success) {
           setIsAuthenticated(true);
-          setUser(data.user); // Store user data
-          // Start timers only if authenticated
-          // We can call these directly here or rely on the state change if we had an effect for it,
-          // but direct call is safer for init.
-          // Note: resetInactivityTimer depends on 'isAuthenticated' state which might not be updated yet in closure.
-          // So we might want to trigger these via a separate effect or pass flag.
-          // For now, let's trust the logic flow or rely on the separate effect below.
+          setUser(data.user);
+
+          // SYNC: Update Zustand Store
+          storeSetUser(data.user);
+
+          // Also fetch full profile details if needed by store
+          // useUserAuthStore.getState().refreshProfile();
         } else {
           setIsAuthenticated(false);
           setUser(null);
+          storeClearAuth();
         }
       } catch (error) {
         console.error('Auth check error:', error);
         setIsAuthenticated(false);
         setUser(null);
+        storeClearAuth();
       } finally {
         setIsLoading(false);
       }
     };
 
     checkAuth();
-  }, []);
+  }, [storeSetUser, storeClearAuth]);
+
+  // ... (Effect to manage timers)
 
   // Effect to manage timers when authentication state changes
   useEffect(() => {

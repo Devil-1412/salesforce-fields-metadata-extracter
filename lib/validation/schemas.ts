@@ -13,7 +13,10 @@ export const passwordSchema = z
   .max(255, 'Password is too long')
   .regex(/[a-zA-Z]/, 'Password must contain at least one letter')
   .regex(/[0-9]/, 'Password must contain at least one number')
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one special character (!@#$%^&* etc.)');
+  .regex(
+    /[!@#$%^&*(),.?":{}|<>]/,
+    'Password must contain at least one special character (!@#$%^&* etc.)'
+  );
 
 /**
  * Email schema with format validation
@@ -96,7 +99,10 @@ export const salesforceCredentialsSchema = z.object({
 // ============================================================================
 
 export const soqlQuerySchema = z.object({
-  query: z.string().min(1, 'Query is required').max(10000, 'Query is too long (max 10,000 characters)'),
+  query: z
+    .string()
+    .min(1, 'Query is required')
+    .max(10000, 'Query is too long (max 10,000 characters)'),
   accessToken: accessTokenSchema,
   instanceUrl: instanceUrlSchema,
 });
@@ -120,7 +126,10 @@ export const getObjectsSchema = z.object({
 });
 
 export const getFieldsSchema = z.object({
-  objects: z.array(objectNameSchema).min(1, 'At least one object is required').max(50, 'Too many objects (max 50)'),
+  objects: z
+    .array(objectNameSchema)
+    .min(1, 'At least one object is required')
+    .max(50, 'Too many objects (max 50)'),
   accessToken: accessTokenSchema,
   instanceUrl: instanceUrlSchema,
 });
@@ -189,6 +198,25 @@ export const securitySettingsSchema = z.object({
 
 export const userPreferencesSchema = z.object({
   preferences: z.record(z.string(), z.unknown()),
+});
+
+// ============================================================================
+// FEEDBACK / REPORT SCHEMAS
+// ============================================================================
+
+export const reportSchema = z.object({
+  type: z.enum(['bug', 'feature_request', 'suggestion']),
+  title: z.string().min(1, 'Title is required').max(100, 'Title is too long'),
+  description: z.string().min(1, 'Description is required').max(5000, 'Description is too long'),
+  images: z
+    .array(z.string().url('Invalid image URL'))
+    .max(5, 'Maximum 5 images allowed')
+    .optional(),
+});
+
+export const updateReportStatusSchema = z.object({
+  reportId: uuidSchema,
+  status: z.enum(['pending', 'solved', 'dismissed']),
 });
 
 // ============================================================================

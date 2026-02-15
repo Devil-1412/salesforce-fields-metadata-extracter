@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServiceRoleClient } from '@lib/supabaseClient';
-import { getAuthToken } from '@lib/cookieAuth';
-import { deleteOrgSchema } from '@lib/validation/schemas';
-import { validateRequestBody } from '@lib/validation/middleware';
 import { validateContentType } from '@lib/contentTypeValidator';
+import { getAuthToken } from '@lib/cookieAuth';
+import { getServiceRoleClient } from '@lib/supabaseClient';
+import { validateRequestBody } from '@lib/validation/middleware';
+import { deleteOrgSchema } from '@lib/validation/schemas';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface DeleteOrgResponse {
   success: boolean;
@@ -11,7 +11,10 @@ interface DeleteOrgResponse {
   error?: string;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<DeleteOrgResponse>) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<DeleteOrgResponse>
+) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
@@ -54,20 +57,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
+    const { data: conn, error: connError } = await supabase
+      .from('connections')
       .select('id, user_id')
       .eq('id', orgId)
       .single();
 
-    if (orgError || !org) {
+    if (connError || !conn) {
       return res.status(404).json({
         success: false,
         error: 'Organization not found',
       });
     }
 
-    if (org.user_id !== profile.id) {
+    if (conn.user_id !== profile.id) {
       return res.status(403).json({
         success: false,
         error: "You don't have permission to delete this organization",
@@ -75,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     const { error: deleteError } = await supabase
-      .from('organizations')
+      .from('connections')
       .delete()
       .eq('id', orgId)
       .eq('user_id', profile.id);

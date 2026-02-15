@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface FieldComparison {
   fieldName: string;
@@ -32,14 +32,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse<CompareFieldsRe
   const { selectedObjects, org1, org2 } = req.body;
 
   try {
-    const conn1 = new jsforce.Connection({
-      accessToken: org1.accessToken,
-      instanceUrl: org1.instanceUrl,
-    });
-    const conn2 = new jsforce.Connection({
-      accessToken: org2.accessToken,
-      instanceUrl: org2.instanceUrl,
-    });
+    // Use AuthStore to get robust connections
+    const store1 = new AuthStore(req, res, org1.instanceUrl);
+    const store2 = new AuthStore(req, res, org2.instanceUrl);
+
+    // Fetch connections in parallel (auto-refreshing if needed)
+    const [conn1, conn2] = await Promise.all([store1.getConnection(), store2.getConnection()]);
 
     const data: ObjectComparison[] = [];
 

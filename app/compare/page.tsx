@@ -1,36 +1,30 @@
 'use client';
 
-import { useState, useEffect, useMemo, ChangeEvent } from 'react';
-import toast from 'react-hot-toast';
+import { type Connection } from '@components/OrgHeader';
 import {
-  Container,
-  Title,
-  Text,
-  Paper,
-  Stack,
-  Group,
-  Button,
-  Select,
-  TextInput,
-  Table,
-  SegmentedControl,
-  Box,
-  Loader,
-  Center,
-  Badge,
   ActionIcon,
+  Badge,
+  Box,
+  Button,
+  Center,
+  Container,
+  Group,
+  Loader,
+  Paper,
   ScrollArea,
+  SegmentedControl,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
 } from '@mantine/core';
 import { IconPlus, IconX } from '@tabler/icons-react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 
-interface Org {
-  orgName: string;
-  accessToken: string | null;
-  instanceUrl: string | null;
-  org_name?: string;
-  instance_url?: string;
-}
-
+/* ── Types ── */
 interface OrgPresence {
   present: boolean;
   label: string;
@@ -43,100 +37,105 @@ interface ComparisonRow {
   orgs: OrgPresence[];
 }
 
-interface AvailableOrg {
-  org_name?: string;
-  orgName?: string;
-  instance_url?: string;
-  instanceUrl?: string;
+/* ── Helpers ── */
+/** Build grouped options for the connection selector */
+function buildGroupedOptions(connections: Connection[]) {
+  const groups: Record<string, { value: string; label: string }[]> = {};
+  (connections || []).forEach((c) => {
+    if (!c) return;
+    const type = c.connection_type.charAt(0).toUpperCase() + c.connection_type.slice(1);
+    if (!groups[type]) groups[type] = [];
+    groups[type].push({ value: c.id, label: c.display_name || 'Untitled' });
+  });
+  return Object.entries(groups).map(([group, items]) => ({ group, items }));
 }
 
 export default function ComparePage() {
+  /* ── Connection state ── */
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+
+  /** IDs of the connections chosen per slot (min 2 slots) */
+  const [slots, setSlots] = useState<(string | null)[]>([null, null]);
+
+  /* ── Comparison state ── */
   const [comparison, setComparison] = useState<ComparisonRow[]>([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [availableOrgs, setAvailableOrgs] = useState<AvailableOrg[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const validOrgs = useMemo(
-    () => orgs.filter((org) => org.accessToken && org.instanceUrl),
-    [orgs]
+  /* ── Derived ── */
+  const groupedOptions = useMemo(() => buildGroupedOptions(connections), [connections]);
+
+  const resolvedSlots = useMemo(
+    () => slots.map((id) => (id ? (connections.find((c) => c.id === id) ?? null) : null)),
+    [slots, connections]
   );
 
-  // Load available orgs from API
-  useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const res = await fetch('/api/listAllOrgs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await res.json();
-        if (data.success) {
-          setAvailableOrgs(data.organizations);
-        }
-      } catch (err) {
-        console.error('Error fetching orgs:', err);
+  const validSlots = useMemo(() => resolvedSlots.filter(Boolean) as Connection[], [resolvedSlots]);
+
+  /* ── Load connections on mount ── */
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    try {
+      const res = await fetch('/api/connections');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.connections)) {
+        setConnections(data.connections);
       }
-    };
-    fetchOrgs();
+    } catch (err) {
+      console.error('Failed to load connections', err);
+      toast.error('Failed to load connections');
+    } finally {
+      setConnectionsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    setOrgs([
-      { orgName: 'Org 1', accessToken: null, instanceUrl: null },
-      { orgName: 'Org 2', accessToken: null, instanceUrl: null },
-    ]);
-  }, []);
+    loadConnections();
+  }, [loadConnections]);
 
+  /* ── Fetch & compare objects when 2+ valid slots ── */
   useEffect(() => {
-    const fetchObjectsForOrg = async (org: Org) => {
-      if (!org.accessToken || !org.instanceUrl) return [];
-      try {
-        const res = await fetch('/api/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accessToken: org.accessToken,
-            instanceUrl: org.instanceUrl,
-          }),
-        });
-        const data = await res.json();
-        if (data.success) return data.object;
-        throw new Error(data.error || 'Failed to fetch objects.');
-      } catch (err) {
-        toast.error(
-          `Error fetching objects for ${org.orgName || org.instanceUrl}: ${
-            (err as Error).message
-          }`
-        );
-        return [];
-      }
-    };
+    if (validSlots.length < 2) {
+      setComparison([]);
+      setLoading(false);
+      return;
+    }
 
-    const fetchAndCompareObjects = async () => {
+    const fetchAndCompare = async () => {
       setLoading(true);
       setError('');
-      if (orgs.length < 2 || orgs.some((o) => !o.accessToken || !o.instanceUrl)) {
-        setLoading(false);
-        return;
-      }
       try {
-        const orgObjectsList = await Promise.all(orgs.map(fetchObjectsForOrg));
-        const allNames = Array.from(
-          new Set(orgObjectsList.flat().map((o: { name: string }) => o.name))
+        const objectLists = await Promise.all(
+          validSlots.map(async (conn) => {
+            try {
+              const res = await fetch(`/api/connections/${conn.id}/tables`);
+              const data = await res.json();
+              if (data.success) return data.tables ?? data.objects ?? [];
+              throw new Error(data.error || 'Failed to fetch');
+            } catch (err) {
+              toast.error(
+                `Error fetching objects for ${conn.display_name}: ${(err as Error).message}`
+              );
+              return [];
+            }
+          })
         );
+
+        const allNames = Array.from(
+          new Set(objectLists.flat().map((o: { name: string }) => o.name))
+        );
+
         const comparisonData: ComparisonRow[] = allNames.map((name) => ({
           objectName: name,
           keyPrefix:
-            orgObjectsList
+            objectLists
               .find((list) => list.some((o: { name: string }) => o.name === name))
               ?.find((o: { name: string }) => o.name === name)?.keyPrefix || '',
-          orgs: orgs.map((org, idx) => {
-            const obj = orgObjectsList[idx].find(
-              (o: { name: string }) => o.name === name
-            );
+          orgs: validSlots.map((_, idx) => {
+            const obj = objectLists[idx].find((o: { name: string }) => o.name === name);
             return {
               present: !!obj,
               label: obj?.label || name,
@@ -151,70 +150,46 @@ export default function ComparePage() {
         setLoading(false);
       }
     };
-    fetchAndCompareObjects();
-  }, [orgs]);
+    fetchAndCompare();
+  }, [validSlots]);
 
-  const addOrg = () => {
-    setOrgs((prev) => [
-      ...prev,
-      { orgName: `Org ${prev.length + 1}`, accessToken: null, instanceUrl: null },
-    ]);
-  };
+  /* ── Slot management ── */
+  const addSlot = () => setSlots((prev) => [...prev, null]);
 
-  const removeOrg = (index: number) => {
-    if (orgs.length > 2) {
-      setOrgs((prev) => prev.filter((_, i) => i !== index));
+  const removeSlot = (index: number) => {
+    if (slots.length > 2) {
+      setSlots((prev) => prev.filter((_, i) => i !== index));
     }
   };
 
-  const updateOrg = (index: number, org: Org) => {
-    const updatedOrgs = [...orgs];
-    updatedOrgs[index] = org;
-    setOrgs(updatedOrgs);
-  };
+  const selectSlot = async (index: number, connectionId: string | null) => {
+    if (!connectionId) return;
+    const conn = connections.find((c) => c.id === connectionId);
+    if (!conn) return;
 
-  const handleOrgSelect = async (index: number, val: string | null) => {
-    if (!val) return;
-    const selectedOrg = availableOrgs.find(
-      (o) => (o.instance_url || o.instanceUrl) === val
-    );
-    if (!selectedOrg) return;
-
-    const targetInstanceUrl = selectedOrg.instance_url || selectedOrg.instanceUrl || '';
-    const toastId = toast.loading(
-      `Logging in to ${selectedOrg.org_name || 'Salesforce'}...`
-    );
-
+    // Health check
+    const toastId = toast.loading(`Connecting to ${conn.display_name}…`);
     try {
-      const res = await fetch('/api/salesforceLogin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
-      });
+      const res = await fetch(`/api/connections/${connectionId}`);
       const data = await res.json();
-      if (data.success) {
-        updateOrg(index, {
-          ...selectedOrg,
-          accessToken: data.accessToken,
-          instanceUrl: targetInstanceUrl,
-          orgName: data.orgName,
-        } as Org);
-        toast.success(
-          `Switched to ${data.orgName !== 'None' ? data.orgName : `Org ${index + 1}`}`,
-          { id: toastId }
-        );
+      if (data.success && data.connection?.healthy) {
+        setSlots((prev) => {
+          const next = [...prev];
+          next[index] = connectionId;
+          return next;
+        });
+        toast.success(`Connected to ${conn.display_name}`, { id: toastId });
       } else {
-        toast.error(data.error || 'Login failed', { id: toastId });
+        toast.error(data.error || 'Connection unhealthy', { id: toastId });
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Login failed', { id: toastId });
+    } catch {
+      toast.error('Connection failed', { id: toastId });
     }
   };
 
+  /* ── Filter ── */
   const filteredComparison = comparison.filter((obj) => {
-    if (search && !obj.objectName.toLowerCase().includes(search.toLowerCase()))
-      return false;
+    if (search && !obj.objectName.toLowerCase().includes(search.toLowerCase())) return false;
     if (filter === 'both') return obj.orgs.every((o) => o.present);
     if (filter === 'different') return obj.orgs.some((o) => !o.present);
     if (filter === 'custom') return obj.orgs.some((o) => o.custom);
@@ -234,72 +209,72 @@ export default function ComparePage() {
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Salesforce Object Comparison
+            Connection Comparison
           </Title>
 
-          {/* Org Selection */}
+          {/* Connection Selection */}
           <Paper radius="lg" shadow="sm" p="lg" withBorder>
             <Group justify="space-between" mb="md">
-              <Title order={4}>Select Organizations</Title>
-              <Button leftSection={<IconPlus size={16} />} size="sm" onClick={addOrg}>
-                Add Org
+              <Title order={4}>Select Connections</Title>
+              <Button leftSection={<IconPlus size={16} />} size="sm" onClick={addSlot}>
+                Add Connection
               </Button>
             </Group>
 
             <Group grow>
-              {orgs.map((org, index) => (
-                <Paper key={index} withBorder radius="md" p="sm">
-                  <Group justify="space-between" mb="xs">
-                    <Text size="sm" fw={600}>
-                      Org {index + 1}
-                    </Text>
-                    {orgs.length > 2 && (
-                      <ActionIcon
-                        color="red"
-                        variant="subtle"
-                        size="sm"
-                        onClick={() => removeOrg(index)}
-                      >
-                        <IconX size={14} />
-                      </ActionIcon>
+              {slots.map((slotId, index) => {
+                const conn = slotId ? (connections.find((c) => c.id === slotId) ?? null) : null;
+                return (
+                  <Paper key={index} withBorder radius="md" p="sm">
+                    <Group justify="space-between" mb="xs">
+                      <Text size="sm" fw={600}>
+                        Connection {index + 1}
+                      </Text>
+                      {slots.length > 2 && (
+                        <ActionIcon
+                          color="red"
+                          variant="subtle"
+                          size="sm"
+                          onClick={() => removeSlot(index)}
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      )}
+                    </Group>
+                    <Select
+                      placeholder={connectionsLoading ? 'Loading…' : 'Select a connection'}
+                      value={slotId}
+                      onChange={(val) => selectSlot(index, val)}
+                      data={groupedOptions}
+                      disabled={connectionsLoading}
+                      searchable
+                    />
+                    {conn && (
+                      <Group gap="xs" mt="xs">
+                        <Badge size="xs" variant="light">
+                          {conn.connection_type.toUpperCase()}
+                        </Badge>
+                        <Text size="xs" c="dimmed">
+                          {conn.display_name}
+                        </Text>
+                      </Group>
                     )}
-                  </Group>
-                  <Select
-                    placeholder="Select an Org"
-                    value={org.instanceUrl || null}
-                    onChange={(val) => handleOrgSelect(index, val)}
-                    data={availableOrgs.map((o) => ({
-                      value: o.instance_url || o.instanceUrl || '',
-                      label:
-                        o.org_name && o.org_name !== 'None'
-                          ? o.org_name
-                          : o.orgName && o.orgName !== 'None'
-                          ? o.orgName
-                          : 'Salesforce Org',
-                    }))}
-                  />
-                  {org.instanceUrl && (
-                    <Text size="xs" c="dimmed" mt="xs">
-                      {org.orgName !== 'None'
-                        ? org.orgName
-                        : org.instanceUrl.replace('https://', '')}
-                    </Text>
-                  )}
-                </Paper>
-              ))}
+                  </Paper>
+                );
+              })}
             </Group>
           </Paper>
 
           {/* Main Content */}
-          {validOrgs.length < 2 ? (
+          {validSlots.length < 2 ? (
             <Center py="xl">
-              <Text c="dimmed">Select at least 2 orgs to compare...</Text>
+              <Text c="dimmed">Select at least 2 connections to compare…</Text>
             </Center>
           ) : loading ? (
             <Center py="xl">
               <Loader />
               <Text c="dimmed" ml="sm">
-                Fetching objects from orgs...
+                Fetching objects from connections…
               </Text>
             </Center>
           ) : error ? (
@@ -311,11 +286,9 @@ export default function ComparePage() {
               {/* Filters */}
               <Group justify="space-between">
                 <TextInput
-                  placeholder="Search object..."
+                  placeholder="Search object…"
                   value={search}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setSearch(e.target.value)
-                  }
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
                   style={{ width: 300 }}
                 />
                 <SegmentedControl
@@ -323,7 +296,7 @@ export default function ComparePage() {
                   onChange={setFilter}
                   data={[
                     { label: 'Show All', value: 'all' },
-                    { label: 'In All Orgs', value: 'both' },
+                    { label: 'In All', value: 'both' },
                     { label: 'Different', value: 'different' },
                     { label: 'Custom Only', value: 'custom' },
                   ]}
@@ -345,9 +318,9 @@ export default function ComparePage() {
                       <Table.Tr>
                         <Table.Th c="white">Object Name</Table.Th>
                         <Table.Th c="white">Key Prefix</Table.Th>
-                        {orgs.map((org, idx) => (
+                        {validSlots.map((conn, idx) => (
                           <Table.Th key={idx} c="white">
-                            {org.orgName !== 'None' ? org.orgName : `Org ${idx + 1}`}
+                            {conn.display_name}
                           </Table.Th>
                         ))}
                       </Table.Tr>
@@ -356,10 +329,7 @@ export default function ComparePage() {
                       {filteredComparison.map((obj) => {
                         const hasMissing = obj.orgs.some((o) => !o.present);
                         return (
-                          <Table.Tr
-                            key={obj.objectName}
-                            bg={hasMissing ? 'red.0' : undefined}
-                          >
+                          <Table.Tr key={obj.objectName} bg={hasMissing ? 'red.0' : undefined}>
                             <Table.Td fw={500}>{obj.objectName}</Table.Td>
                             <Table.Td>{obj.keyPrefix}</Table.Td>
                             {obj.orgs.map((o, orgIdx) => (

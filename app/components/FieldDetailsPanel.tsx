@@ -1,30 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import {
-  Drawer,
-  Title,
-  Text,
   Badge,
-  Group,
-  Stack,
-  Paper,
-  Code,
-  Skeleton,
-  ThemeIcon,
-  CloseButton,
-  SimpleGrid,
   Box,
+  CloseButton,
+  Code,
+  Drawer,
+  Group,
+  Paper,
+  SimpleGrid,
+  Skeleton,
+  Stack,
+  Text,
+  ThemeIcon,
+  Title,
 } from '@mantine/core';
 import {
   IconCalendar,
-  IconUser,
-  IconFileText,
-  IconShield,
-  IconInfoCircle,
   IconDatabase,
+  IconFileText,
+  IconInfoCircle,
+  IconShield,
+  IconUser,
 } from '@tabler/icons-react';
-import toast from 'react-hot-toast';
+import { useEffect, useState } from 'react';
 
 interface CreatedByRef {
   Name?: string;
@@ -66,16 +65,14 @@ interface FieldDetails {
 interface FieldDetailsPanelProps {
   field: FieldDetails | null;
   onClose: () => void;
-  instanceUrl: string;
-  token: string;
+  connectionId: string;
   objectName: string;
 }
 
 export default function FieldDetailsPanel({
   field,
   onClose,
-  instanceUrl,
-  token,
+  connectionId,
   objectName,
 }: FieldDetailsPanelProps) {
   const [details, setDetails] = useState<FieldDetails | null>(null);
@@ -89,8 +86,7 @@ export default function FieldDetailsPanel({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            accessToken: token,
-            instanceUrl,
+            connectionId,
             objectName,
             fieldName: field?.ApiName || field?.name,
           }),
@@ -108,10 +104,10 @@ export default function FieldDetailsPanel({
       }
     };
 
-    if (field && token && instanceUrl) {
+    if (field && connectionId) {
       fetchDetails();
     }
-  }, [field, token, instanceUrl, objectName]);
+  }, [field, connectionId, objectName]);
 
   if (!field) return null;
 
@@ -138,7 +134,14 @@ export default function FieldDetailsPanel({
       overlayProps={{ backgroundOpacity: 0.3, blur: 2 }}
     >
       {/* Header */}
-      <Box px="lg" py="md" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)', backgroundColor: 'var(--mantine-color-gray-0)' }}>
+      <Box
+        px="lg"
+        py="md"
+        style={{
+          borderBottom: '1px solid var(--mantine-color-gray-2)',
+          backgroundColor: 'var(--mantine-color-gray-0)',
+        }}
+      >
         <Group justify="space-between" align="flex-start">
           <Stack gap="xs">
             <Group gap="xs">
@@ -165,24 +168,37 @@ export default function FieldDetailsPanel({
           <Paper p="md" radius="md" style={{ backgroundColor: 'var(--mantine-color-blue-0)' }}>
             <Group gap="xs" mb="sm">
               <IconInfoCircle size={16} color="var(--mantine-color-blue-6)" />
-              <Text fw={600} size="sm" c="blue.9">Description</Text>
+              <Text fw={600} size="sm" c="blue.9">
+                Description
+              </Text>
             </Group>
             <Text size="sm" c="gray.7" style={{ whiteSpace: 'pre-wrap' }}>
               {displayData.Description || displayData.description || 'No description provided.'}
             </Text>
             {displayData.HelpText && (
               <Box mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-blue-2)' }}>
-                <Text size="xs" fw={700} c="blue.8" mb="xs">HELP TEXT</Text>
-                <Text size="sm" c="blue.7" fs="italic">"{displayData.HelpText}"</Text>
+                <Text size="xs" fw={700} c="blue.8" mb="xs">
+                  HELP TEXT
+                </Text>
+                <Text size="sm" c="blue.7" fs="italic">
+                  "{displayData.HelpText}"
+                </Text>
               </Box>
             )}
           </Paper>
 
           {/* Audit Info */}
           <Box>
-            <Group gap="xs" mb="md" pb="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+            <Group
+              gap="xs"
+              mb="md"
+              pb="sm"
+              style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}
+            >
               <IconCalendar size={16} color="var(--mantine-color-gray-5)" />
-              <Text fw={700} size="sm" tt="uppercase">Audit Information</Text>
+              <Text fw={700} size="sm" tt="uppercase">
+                Audit Information
+              </Text>
             </Group>
 
             {loading ? (
@@ -197,9 +213,15 @@ export default function FieldDetailsPanel({
                     <IconUser size={18} />
                   </ThemeIcon>
                   <Box>
-                    <Text size="xs" c="dimmed" tt="uppercase">Created By</Text>
-                    <Text size="sm" fw={500}>{displayData.CreatedBy?.Name || 'System / Unknown'}</Text>
-                    <Text size="xs" c="dimmed">{formatDate(displayData.CreatedDate)}</Text>
+                    <Text size="xs" c="dimmed" tt="uppercase">
+                      Created By
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {displayData.CreatedBy?.Name || 'System / Unknown'}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {formatDate(displayData.CreatedDate)}
+                    </Text>
                   </Box>
                 </Group>
 
@@ -208,9 +230,15 @@ export default function FieldDetailsPanel({
                     <IconFileText size={18} />
                   </ThemeIcon>
                   <Box>
-                    <Text size="xs" c="dimmed" tt="uppercase">Last Modified By</Text>
-                    <Text size="sm" fw={500}>{displayData.LastModifiedBy?.Name || 'System / Unknown'}</Text>
-                    <Text size="xs" c="dimmed">{formatDate(displayData.LastModifiedDate)}</Text>
+                    <Text size="xs" c="dimmed" tt="uppercase">
+                      Last Modified By
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {displayData.LastModifiedBy?.Name || 'System / Unknown'}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {formatDate(displayData.LastModifiedDate)}
+                    </Text>
                   </Box>
                 </Group>
               </Stack>
@@ -219,9 +247,16 @@ export default function FieldDetailsPanel({
 
           {/* Technical Details */}
           <Box>
-            <Group gap="xs" mb="md" pb="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+            <Group
+              gap="xs"
+              mb="md"
+              pb="sm"
+              style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}
+            >
               <IconDatabase size={16} color="var(--mantine-color-gray-5)" />
-              <Text fw={700} size="sm" tt="uppercase">Properties</Text>
+              <Text fw={700} size="sm" tt="uppercase">
+                Properties
+              </Text>
             </Group>
 
             <SimpleGrid cols={2} spacing="md">
@@ -231,13 +266,19 @@ export default function FieldDetailsPanel({
               <DetailItem label="Unique" value={displayData.unique} isBool />
               <DetailItem label="External ID" value={displayData.externalId} isBool />
               <DetailItem label="Case Sensitive" value={displayData.caseSensitive} isBool />
-              <DetailItem label="Required" value={!displayData.nillable && !displayData.firstName} isBool />
+              <DetailItem
+                label="Required"
+                value={!displayData.nillable && !displayData.firstName}
+                isBool
+              />
               <DetailItem label="Calculated" value={displayData.calculated} isBool />
             </SimpleGrid>
 
             {displayData.defaultValueFormula && (
               <Box mt="md">
-                <Text size="xs" c="dimmed" tt="uppercase" mb="xs">Default Formula</Text>
+                <Text size="xs" c="dimmed" tt="uppercase" mb="xs">
+                  Default Formula
+                </Text>
                 <Code block style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>
                   {displayData.defaultValueFormula}
                 </Code>
@@ -246,7 +287,9 @@ export default function FieldDetailsPanel({
 
             {displayData.calculatedFormula && (
               <Box mt="md">
-                <Text size="xs" c="dimmed" tt="uppercase" mb="xs">Calculated Formula</Text>
+                <Text size="xs" c="dimmed" tt="uppercase" mb="xs">
+                  Calculated Formula
+                </Text>
                 <Code block style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>
                   {displayData.calculatedFormula}
                 </Code>
@@ -255,22 +298,43 @@ export default function FieldDetailsPanel({
           </Box>
 
           {/* Compliance */}
-          {(displayData.SecurityClassification || displayData.BusinessStatus || displayData.ComplianceGroup) && (
+          {(displayData.SecurityClassification ||
+            displayData.BusinessStatus ||
+            displayData.ComplianceGroup) && (
             <Box>
-              <Group gap="xs" mb="md" pb="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+              <Group
+                gap="xs"
+                mb="md"
+                pb="sm"
+                style={{ borderBottom: '1px solid var(--mantine-color-gray-2)' }}
+              >
                 <IconShield size={16} color="var(--mantine-color-gray-5)" />
-                <Text fw={700} size="sm" tt="uppercase">Compliance</Text>
+                <Text fw={700} size="sm" tt="uppercase">
+                  Compliance
+                </Text>
               </Group>
 
               <Stack gap="sm">
                 {displayData.SecurityClassification && (
-                  <BadgeItem label="Security Classification" value={displayData.SecurityClassification} color="red" />
+                  <BadgeItem
+                    label="Security Classification"
+                    value={displayData.SecurityClassification}
+                    color="red"
+                  />
                 )}
                 {displayData.BusinessStatus && (
-                  <BadgeItem label="Business Status" value={displayData.BusinessStatus} color="blue" />
+                  <BadgeItem
+                    label="Business Status"
+                    value={displayData.BusinessStatus}
+                    color="blue"
+                  />
                 )}
                 {displayData.ComplianceGroup && (
-                  <BadgeItem label="Compliance Group" value={displayData.ComplianceGroup} color="grape" />
+                  <BadgeItem
+                    label="Compliance Group"
+                    value={displayData.ComplianceGroup}
+                    color="grape"
+                  />
                 )}
               </Stack>
             </Box>
@@ -292,15 +356,23 @@ function DetailItem({ label, value, isBool }: DetailItemProps) {
 
   return (
     <Box>
-      <Text size="xs" c="dimmed" tt="uppercase">{label}</Text>
+      <Text size="xs" c="dimmed" tt="uppercase">
+        {label}
+      </Text>
       {isBool ? (
         value ? (
-          <Text size="sm" c="teal" fw={600}>Yes</Text>
+          <Text size="sm" c="teal" fw={600}>
+            Yes
+          </Text>
         ) : (
-          <Text size="sm" c="dimmed">No</Text>
+          <Text size="sm" c="dimmed">
+            No
+          </Text>
         )
       ) : (
-        <Text size="sm" fw={500}>{String(value)}</Text>
+        <Text size="sm" fw={500}>
+          {String(value)}
+        </Text>
       )}
     </Box>
   );
@@ -315,7 +387,9 @@ interface BadgeItemProps {
 function BadgeItem({ label, value, color }: BadgeItemProps) {
   return (
     <Group justify="space-between">
-      <Text size="sm" c="gray.6">{label}</Text>
+      <Text size="sm" c="gray.6">
+        {label}
+      </Text>
       <Badge color={color} variant="light" size="sm" tt="uppercase">
         {value}
       </Badge>

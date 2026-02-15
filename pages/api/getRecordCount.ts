@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface RecordCountResponse {
   success: boolean;
@@ -15,9 +15,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse<RecordCountResp
 
   const { instanceUrl, accessToken, objectName } = req.body;
 
-  const conn = new jsforce.Connection({ instanceUrl, accessToken });
-
   try {
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
     const result = await conn.query(`SELECT COUNT() FROM ${objectName}`);
     const count = result.totalSize;
     res.status(200).json({ success: true, count });

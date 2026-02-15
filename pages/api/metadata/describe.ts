@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface FieldInfo {
   name: string;
@@ -30,13 +30,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse<DescribeRespons
 
   const { accessToken, instanceUrl, objectName } = req.body;
 
-  if (!accessToken || !instanceUrl) {
-    return res.status(400).json({ success: false, error: 'Missing accessToken or instanceUrl' });
+  if (!instanceUrl) {
+    return res.status(400).json({ success: false, error: 'Missing instanceUrl' });
   }
 
-  const conn = new jsforce.Connection({ accessToken, instanceUrl });
-
   try {
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
     if (objectName) {
       const metadata = await conn.describe(objectName);
       const fields = metadata.fields.map((f) => ({

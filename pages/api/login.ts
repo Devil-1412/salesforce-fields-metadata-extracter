@@ -99,13 +99,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       console.error('Unexpected error saving session:', sessionErr);
     }
 
-    const { count, error: orgError } = await supabase
-      .from('organizations')
+    const { count, error: connError } = await supabase
+      .from('connections')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', data.user.id);
 
-    if (orgError) {
-      console.error('Error checking organizations:', orgError);
+    if (connError) {
+      console.error('Error checking connections:', connError);
     }
 
     // Set both access and refresh token cookies

@@ -1,10 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
-import { jsforceRateLimiter } from '@lib/rateLimiter';
-import { soqlQuerySchema } from '@lib/validation/schemas';
-import { validateRequestBody } from '@lib/validation/middleware';
-import { handleApiError } from '@lib/errorHandler';
+import { AuthStore } from '@lib/AuthStore';
 import { validateContentType } from '@lib/contentTypeValidator';
+import { handleApiError } from '@lib/errorHandler';
+import { jsforceRateLimiter } from '@lib/rateLimiter';
+import { validateRequestBody } from '@lib/validation/middleware';
+import { soqlQuerySchema } from '@lib/validation/schemas';
+import jsforce from 'jsforce';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface SoqlResponse {
   success: boolean;
@@ -29,10 +30,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse<SoqlResponse>) 
   const { accessToken, instanceUrl, query } = validated;
 
   try {
-    const conn = new jsforce.Connection({ accessToken, instanceUrl });
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
     const result = await conn.query(query);
     res.status(200).json({ success: true, data: result });
   } catch (error) {
+    const err = error as Error & { errorCode?: string };
+    // If it's a specific SOQL error (usually has an errorCode like MALFORMED_QUERY),
+    // return the actual message so the user can fix their query.
+    if (err.errorCode || err.name === 'SfError' || err.message?.includes('SOQL')) {
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Invalid SOQL query',
+      });
+    }
     return handleApiError(error, req, res, 'soql');
   }
 }

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { NextApiRequest, NextApiResponse, NextApiHandler } from 'next';
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { getAuthToken } from './cookieAuth';
 
 /**
@@ -39,7 +39,9 @@ function initCleanup(): void {
     cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [userId, data] of rateLimitStore.entries()) {
-        const validRequests = data.requests.filter((timestamp) => now - timestamp < DEFAULT_WINDOW_MS);
+        const validRequests = data.requests.filter(
+          (timestamp) => now - timestamp < DEFAULT_WINDOW_MS
+        );
 
         if (validRequests.length === 0) {
           rateLimitStore.delete(userId);
@@ -74,7 +76,8 @@ export function checkRateLimit(userId: string, options: RateLimitOptions = {}): 
 
   if (userData.requests.length >= maxRequests) {
     const oldestRequest = userData.requests[0];
-    const retryAfter = Math.ceil((oldestRequest + windowMs - now) / 1000);
+    const retryAfter =
+      oldestRequest != null ? Math.ceil((oldestRequest + windowMs - now) / 1000) : 1;
 
     return {
       allowed: false,
@@ -126,7 +129,10 @@ async function getUserIdFromRequest(req: NextApiRequest): Promise<string | null>
 /**
  * Middleware wrapper for Next.js API routes to add rate limiting
  */
-export function jsforceRateLimiter(handler: NextApiHandler, options: RateLimitOptions = {}): NextApiHandler {
+export function jsforceRateLimiter(
+  handler: NextApiHandler,
+  options: RateLimitOptions = {}
+): NextApiHandler {
   return async (req: NextApiRequest, res: NextApiResponse) => {
     try {
       const userId = await getUserIdFromRequest(req);
@@ -168,7 +174,11 @@ export function resetRateLimit(userId: string): void {
 /**
  * Get current rate limit status for a user
  */
-export function getRateLimitStatus(userId: string): { requestCount: number; limit: number; remaining: number } {
+export function getRateLimitStatus(userId: string): {
+  requestCount: number;
+  limit: number;
+  remaining: number;
+} {
   const userData = rateLimitStore.get(userId);
 
   if (!userData) {
@@ -180,7 +190,9 @@ export function getRateLimitStatus(userId: string): { requestCount: number; limi
   }
 
   const now = Date.now();
-  const validRequests = userData.requests.filter((timestamp) => now - timestamp < DEFAULT_WINDOW_MS);
+  const validRequests = userData.requests.filter(
+    (timestamp) => now - timestamp < DEFAULT_WINDOW_MS
+  );
 
   return {
     requestCount: validRequests.length,

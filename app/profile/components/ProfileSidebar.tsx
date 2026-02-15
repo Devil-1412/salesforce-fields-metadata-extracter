@@ -1,21 +1,14 @@
 'use client';
 
+import { Avatar, Divider, Group, NavLink, Paper, Stack, Text } from '@mantine/core';
 import {
-  Paper,
-  Avatar,
-  Text,
-  Stack,
-  NavLink,
-  Divider,
-  Group,
-} from '@mantine/core';
-import {
-  IconUser,
   IconBuilding,
-  IconShield,
-  IconSettings,
   IconLifebuoy,
   IconLogout,
+  IconSettings,
+  IconShield,
+  IconSnowflake,
+  IconUser,
 } from '@tabler/icons-react';
 
 interface Tab {
@@ -39,6 +32,7 @@ interface ProfileSidebarProps {
 const TABS: Tab[] = [
   { id: 'profile', label: 'Profile', icon: <IconUser size={18} /> },
   { id: 'organization', label: 'Organization', icon: <IconBuilding size={18} /> },
+  { id: 'snowflake', label: 'Snowflake', icon: <IconSnowflake size={18} /> },
   { id: 'security', label: 'Security', icon: <IconShield size={18} /> },
   { id: 'preferences', label: 'Preferences', icon: <IconSettings size={18} /> },
   { id: 'support', label: 'Support', icon: <IconLifebuoy size={18} /> },

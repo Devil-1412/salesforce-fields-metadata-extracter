@@ -1,11 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
-import { getServiceRoleClient } from '@lib/supabaseClient';
-import { decrypt } from '@lib/encryption';
-import { jsforceRateLimiter } from '@lib/rateLimiter';
+import { AuthStore } from '@lib/AuthStore';
+import { validateContentType } from '@lib/contentTypeValidator';
 import { getAuthToken } from '@lib/cookieAuth';
 import { handleApiError, logError } from '@lib/errorHandler';
-import { validateContentType } from '@lib/contentTypeValidator';
+import { jsforceRateLimiter } from '@lib/rateLimiter';
+import { getServiceRoleClient } from '@lib/supabaseClient';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface SalesforceLoginResponse {
   success: boolean;
@@ -46,27 +45,44 @@ async function handler(req: NextApiRequest, res: NextApiResponse<SalesforceLogin
       return res.status(401).json({ success: false, error: 'Invalid token' });
     }
 
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id, org_email, org_name, encrypted_org_password, encrypted_security_token, is_sandbox, instance_url')
+    const { data: conn, error: connError } = await supabase
+      .from('connections')
+      .select(
+        'id, salesforce_connection_details(org_email, org_name, encrypted_org_password, encrypted_security_token, is_sandbox, instance_url)'
+      )
       .eq('user_id', user.id)
-      .eq('instance_url', instanceUrl)
+      .eq('connection_type', 'salesforce')
       .single();
 
-    if (orgError || !org) {
-      console.error('Supabase fetch error or org not found:', orgError);
+    // Flatten the nested details
+    const details = (conn as any)?.salesforce_connection_details;
+    const org =
+      conn && details
+        ? {
+            id: conn.id,
+            org_email: details.org_email,
+            org_name: details.org_name,
+            encrypted_org_password: details.encrypted_org_password,
+            encrypted_security_token: details.encrypted_security_token,
+            is_sandbox: details.is_sandbox,
+            instance_url: details.instance_url,
+          }
+        : null;
+
+    if (connError || !org) {
+      console.error('Supabase fetch error or org not found:', connError);
       return res.status(404).json({ success: false, error: 'Organization not found' });
     }
 
-    const loginUrl = org.is_sandbox ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+    const loginUrl = org.is_sandbox
+      ? 'https://test.salesforce.com'
+      : 'https://login.salesforce.com';
 
-    const conn = new jsforce.Connection({ loginUrl });
+    // Use AuthStore to handle the connection (Cache -> Verify -> Login -> Cache)
+    const store = new AuthStore(req, res, instanceUrl);
 
     try {
-      const orgPassword = org.encrypted_org_password ? decrypt(org.encrypted_org_password) : '';
-      const securityToken = org.encrypted_security_token ? decrypt(org.encrypted_security_token) : '';
-
-      await conn.login(org.org_email, orgPassword + securityToken);
+      const conn = await store.getConnection();
 
       res.status(200).json({
         success: true,
@@ -78,7 +94,8 @@ async function handler(req: NextApiRequest, res: NextApiResponse<SalesforceLogin
       logError(loginErr, req, 'salesforceLogin-login');
       return res.status(401).json({
         success: false,
-        error: 'Login failed for this organization. Please add this organisation again in user profile.',
+        error:
+          'Login failed for this organization. Please add this organisation again in user profile.',
       });
     }
   } catch (err) {

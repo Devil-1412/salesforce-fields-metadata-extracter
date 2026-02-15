@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface MetadataItem {
   id?: string;
@@ -21,16 +21,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse<ObjectMetadataR
 
   const { accessToken, instanceUrl, selectedObject, type } = req.body;
 
-  if (!accessToken || !instanceUrl || !type) {
+  if (!instanceUrl || !type) {
     return res.status(400).json({ success: false, error: 'Missing required parameters' });
   }
 
   try {
-    const conn = new jsforce.Connection({
-      instanceUrl,
-      accessToken,
-      version: '60.0',
-    });
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
 
     let result: MetadataItem[] = [];
 
@@ -148,14 +145,19 @@ async function handler(req: NextApiRequest, res: NextApiResponse<ObjectMetadataR
             result = [];
           }
         } catch (err) {
-          console.warn(`⚠️ Could not fetch workflows for ${selectedObject}:`, (err as Error).message);
+          console.warn(
+            `⚠️ Could not fetch workflows for ${selectedObject}:`,
+            (err as Error).message
+          );
           result = [];
         }
         break;
       }
 
       default:
-        return res.status(400).json({ success: false, error: `Unsupported metadata type: ${type}` });
+        return res
+          .status(400)
+          .json({ success: false, error: `Unsupported metadata type: ${type}` });
     }
 
     return res.status(200).json({ success: true, data: result });

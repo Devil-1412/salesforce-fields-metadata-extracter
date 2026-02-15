@@ -1,5 +1,5 @@
 import { validateContentType } from '@lib/contentTypeValidator';
-import { getAuthToken } from '@lib/cookieAuth';
+import { getAuthToken, setSalesforceTokenCookie } from '@lib/cookieAuth';
 import { encrypt } from '@lib/encryption';
 import { handleApiError, logError } from '@lib/errorHandler';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
@@ -53,10 +53,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse<AddOrgResponse>
 
     let instanceUrl: string | null = null;
     let orgName: string | null = null;
+    let accessToken: string | undefined;
+
     try {
       const conn = new jsforce.Connection({ loginUrl });
       await conn.login(orgEmail, orgPassword + securityToken);
       instanceUrl = conn.instanceUrl;
+      accessToken = conn.accessToken;
 
       const orgInfo = await conn.query<{ Name: string }>('SELECT Name FROM Organization LIMIT 1');
       if (orgInfo.records?.length > 0) {
@@ -90,24 +93,49 @@ async function handler(req: NextApiRequest, res: NextApiResponse<AddOrgResponse>
       });
     }
 
-    const { error: insertError } = await supabase.from('organizations').insert([
-      {
+    // Insert into connections parent table
+    const { data: newConnection, error: connectionError } = await supabase
+      .from('connections')
+      .insert({
         user_id: user.id,
-        org_email: orgEmail,
-        org_name: orgName,
-        encrypted_org_password: encryptedPassword,
-        encrypted_security_token: encryptedToken,
-        is_sandbox: isSandbox,
-        instance_url: instanceUrl,
-      },
-    ]);
+        connection_type: 'salesforce',
+        display_name: orgName || 'Salesforce Org',
+      })
+      .select('id')
+      .single();
 
-    if (insertError) {
-      console.error('Insert error:', insertError.message);
+    if (connectionError || !newConnection) {
+      console.error('Connection insert error:', connectionError?.message);
       return res.status(500).json({
         success: false,
-        error: 'Failed to save organization in database',
+        error: 'Failed to save connection in database',
       });
+    }
+
+    // Insert Salesforce-specific details into child table
+    const { error: detailsError } = await supabase.from('salesforce_connection_details').insert({
+      connection_id: newConnection.id,
+      org_email: orgEmail,
+      org_name: orgName,
+      encrypted_org_password: encryptedPassword,
+      encrypted_security_token: encryptedToken,
+      is_sandbox: isSandbox,
+      instance_url: instanceUrl,
+    });
+
+    if (detailsError) {
+      console.error('Details insert error:', detailsError.message);
+      // Clean up the parent connection if details fail
+      await supabase.from('connections').delete().eq('id', newConnection.id);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to save organization details in database',
+      });
+    }
+
+    // Set the token cookie immediately for better UX
+    if (accessToken) {
+      setSalesforceTokenCookie(res, accessToken, newConnection.id);
     }
 
     console.log('✅ Organization added with encrypted credentials');

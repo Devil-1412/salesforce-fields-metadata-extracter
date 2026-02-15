@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface ObjectComparison {
   keyPrefix: string;
@@ -22,8 +22,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse<CompareObjectsR
   try {
     const { org1, org2 } = req.body;
 
-    const conn1 = new jsforce.Connection({ instanceUrl: org1.instanceUrl, accessToken: org1.accessToken });
-    const conn2 = new jsforce.Connection({ instanceUrl: org2.instanceUrl, accessToken: org2.accessToken });
+    const store1 = new AuthStore(req, res, org1.instanceUrl);
+    const store2 = new AuthStore(req, res, org2.instanceUrl);
+
+    const [conn1, conn2] = await Promise.all([store1.getConnection(), store2.getConnection()]);
 
     const [meta1, meta2] = await Promise.all([conn1.describeGlobal(), conn2.describeGlobal()]);
 
@@ -40,7 +42,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse<CompareObjectsR
       custom: o.custom,
     }));
 
-    const allObjectNames = new Set([...org1Objects.map((o) => o.name), ...org2Objects.map((o) => o.name)]);
+    const allObjectNames = new Set([
+      ...org1Objects.map((o) => o.name),
+      ...org2Objects.map((o) => o.name),
+    ]);
 
     const comparison = Array.from(allObjectNames).map((name) => {
       const obj1 = org1Objects.find((o) => o.name === name);

@@ -1,6 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import jsforce from 'jsforce';
+import { AuthStore } from '@lib/AuthStore';
 import { jsforceRateLimiter } from '@lib/rateLimiter';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface FieldDetailsResponse {
   success: boolean;
@@ -15,12 +15,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse<FieldDetailsRes
 
   const { accessToken, instanceUrl, objectName, fieldName } = req.body;
 
-  if (!accessToken || !instanceUrl || !objectName || !fieldName) {
+  if (!instanceUrl || !objectName || !fieldName) {
     return res.status(400).json({ success: false, error: 'Missing required parameters' });
   }
 
   try {
-    const conn = new jsforce.Connection({ accessToken, instanceUrl });
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
 
     const query = `
 SELECT

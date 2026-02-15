@@ -2,11 +2,11 @@
 
 import EmptyState from '@components/EmptyState';
 import FieldAnalysisTable from '@components/FieldAnalysisTable';
-import OrgHeader from '@components/OrgHeader';
+import OrgHeader, { type Connection } from '@components/OrgHeader';
 import SearchableDropdown from '@components/SearchableDropdown';
 import { Box, Container, Group, Paper, Stack, Tabs, Text } from '@mantine/core';
 import { IconBox } from '@tabler/icons-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 // Co-located components
@@ -16,20 +16,7 @@ import TriggersTable from './components/TriggersTable';
 import ValidationRulesTable from './components/ValidationRulesTable';
 import WorkflowsTable from './components/WorkflowsTable';
 
-interface Org {
-  instance_url?: string;
-  instanceUrl?: string;
-  org_name?: string;
-  orgName?: string;
-}
-
-interface OrgMeta {
-  accessToken: string;
-  instanceUrl: string;
-  [key: string]: unknown;
-}
-
-interface SalesforceObject {
+interface TableObject {
   name: string;
   label: string;
   keyPrefix?: string;
@@ -152,129 +139,121 @@ const ALL_METADATA_KEYS = [
   'Formula',
 ];
 
-const TABS = [
-  'Fields',
-  'Field Analysis',
-  'Validation Rules',
-  'Triggers',
-  'Apex Classes',
-  'Workflows',
-];
+/**
+ * Tab registry — maps connection type to available metadata tabs.
+ * 'Fields' is always present. Provider-specific tabs are appended.
+ * Adding a new provider? Just add an entry here.
+ */
+const TAB_REGISTRY: Record<string, string[]> = {
+  salesforce: [
+    'Fields',
+    'Field Analysis',
+    'Validation Rules',
+    'Triggers',
+    'Apex Classes',
+    'Workflows',
+  ],
+  snowflake: ['Fields', 'Field Analysis', 'Constraints'],
+};
 
 export default function MetadataPage() {
   const [activeTab, setActiveTab] = useState<string | null>('Fields');
 
-  // Org State
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgLoading, setOrgLoading] = useState(true);
-  const [selectedOrgId, setSelectedOrgId] = useState('');
-  const [selectedOrgMeta, setSelectedOrgMeta] = useState<OrgMeta | null>(null);
-  const [token, setToken] = useState('');
-  const [instanceUrl, setInstanceUrl] = useState('');
+  // ── Connection state ──
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
 
-  // Object State
-  const [objects, setObjects] = useState<SalesforceObject[]>([]);
+  /** Derive connection type from the selected connection */
+  const selectedConnection = useMemo(
+    () => connections.find((c) => c.id === selectedConnectionId) ?? null,
+    [connections, selectedConnectionId]
+  );
+  const connectionType = selectedConnection?.connection_type ?? '';
+  const tabs = TAB_REGISTRY[connectionType] ?? ['Fields'];
+
+  // ── Object state ──
+  const [objects, setObjects] = useState<TableObject[]>([]);
   const [objectsLoading, setObjectsLoading] = useState(false);
   const [selectedObject, setSelectedObject] = useState('');
 
-  // Metadata State
+  // ── Metadata state ──
   const [recordCounts, setRecordCounts] = useState<Record<string, number | string>>({});
   const [fieldsData, setFieldsData] = useState<Record<string, Field[]>>({});
   const [validationRules, setValidationRules] = useState<ValidationRule[]>([]);
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [apexClasses, setApexClasses] = useState<ApexClass[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [constraints, setConstraints] = useState<Record<string, unknown>[]>([]);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
 
-  // Load Orgs on Mount
-  const loadOrgs = useCallback(async () => {
-    setOrgLoading(true);
+  // ── Load connections on mount ──
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
     try {
-      const res = await fetch('/api/listAllOrgs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const res = await fetch('/api/connections');
       const data = await res.json();
-      if (data.success && Array.isArray(data.organizations)) {
-        setOrgs(data.organizations);
+      if (data.success && Array.isArray(data.connections)) {
+        setConnections(data.connections);
       }
     } catch (error) {
-      console.error('Failed to load orgs', error);
-      toast.error('Failed to load organizations');
+      console.error('Failed to load connections', error);
+      toast.error('Failed to load connections');
     } finally {
-      setOrgLoading(false);
+      setConnectionsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadOrgs();
-  }, [loadOrgs]);
+    loadConnections();
+  }, [loadConnections]);
 
-  // Select Org Logic
-  const selectOrg = useCallback(
-    async (instanceValue: string) => {
-      const org = orgs.find(
-        (item) => item.instance_url === instanceValue || item.instanceUrl === instanceValue
-      );
-      if (!org) return;
+  // ── Select connection ──
+  const selectConnection = useCallback(
+    async (connectionId: string) => {
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn) return;
 
-      const targetInstanceUrl = org.instance_url || org.instanceUrl || '';
-      const toastId = toast.loading(`Logging in to ${org.org_name || 'Salesforce'}...`);
+      const toastId = toast.loading(`Connecting to ${conn.display_name}...`);
+
+      setSelectedConnectionId(connectionId);
+      // Reset object state
+      setObjects([]);
+      setSelectedObject('');
+      setFieldsData({});
+      setValidationRules([]);
+      setTriggers([]);
+      setApexClasses([]);
+      setWorkflows([]);
+      setConstraints([]);
+      setRecordCounts({});
 
       try {
-        const res = await fetch('/api/salesforceLogin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
-        });
+        // Health check (also initialises SF session server-side)
+        const res = await fetch(`/api/connections/${connectionId}`);
         const data = await res.json();
-
-        if (data.success) {
-          setSelectedOrgId(targetInstanceUrl);
-          setSelectedOrgMeta({
-            ...org,
-            accessToken: data.accessToken,
-            instanceUrl: targetInstanceUrl,
-          } as OrgMeta);
-          setToken(data.accessToken);
-          setInstanceUrl(targetInstanceUrl);
-
-          // Reset object state
-          setObjects([]);
-          setSelectedObject('');
-          setFieldsData({});
-          setValidationRules([]);
-          setTriggers([]);
-          setApexClasses([]);
-          setWorkflows([]);
-          setRecordCounts({});
-
-          toast.success(`Connected to ${data.orgName || 'Salesforce Org'}`, { id: toastId });
+        if (data.success && data.connection?.healthy) {
+          toast.success(`Connected to ${conn.display_name}`, { id: toastId });
         } else {
-          toast.error(data.error || 'Login failed', { id: toastId });
+          toast.error('Connection unhealthy — check credentials', { id: toastId });
         }
-      } catch (err) {
-        console.error('Login Error:', err);
-        toast.error('Login failed', { id: toastId });
+      } catch {
+        toast.error('Failed to verify connection', { id: toastId });
       }
     },
-    [orgs]
+    [connections]
   );
 
-  // Fetch Objects when Org is Selected
+  // ── Fetch objects/tables when connection is selected ──
   useEffect(() => {
     const fetchObjects = async () => {
-      if (!instanceUrl || !token) return;
+      if (!selectedConnectionId) return;
       setObjectsLoading(true);
       try {
-        const res = await fetch('/api/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token, instanceUrl }),
-        });
+        const res = await fetch(`/api/connections/${selectedConnectionId}/tables`);
         const data = await res.json();
         if (data.success) {
-          setObjects(data.object);
+          setObjects(data.tables || []);
         } else {
           toast.error('Failed to fetch objects');
         }
@@ -287,31 +266,31 @@ export default function MetadataPage() {
     };
 
     fetchObjects();
-  }, [instanceUrl, token]);
+  }, [selectedConnectionId]);
 
-  // Fetch Metadata when Object is Selected
+  // ── Fetch fields + record count when object is selected ──
   useEffect(() => {
-    if (!selectedObject || !instanceUrl || !token) return;
+    if (!selectedObject || !selectedConnectionId) return;
 
-    const fetchFields = async () => {
+    const fetchFieldsAndCount = async () => {
       if (fieldsData[selectedObject]) return;
       setLoadingMetadata(true);
       try {
-        const fieldsRes = await fetch('/api/fields', {
+        // Fetch detailed fields
+        const fieldsRes = await fetch(`/api/connections/${selectedConnectionId}/fields`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token, instanceUrl, objects: [selectedObject] }),
+          body: JSON.stringify({ objects: [selectedObject] }),
         });
         const fieldsPayload = await fieldsRes.json();
         if (fieldsPayload.success) {
           setFieldsData((prev) => ({ ...prev, ...fieldsPayload.data }));
         }
 
-        const countRes = await fetch('/api/getRecordCount', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token, instanceUrl, objectName: selectedObject }),
-        });
+        // Fetch record count
+        const countRes = await fetch(
+          `/api/connections/${selectedConnectionId}/record-count?object=${encodeURIComponent(selectedObject)}`
+        );
         const countData = await countRes.json();
         setRecordCounts((prev) => ({
           ...prev,
@@ -325,32 +304,33 @@ export default function MetadataPage() {
       }
     };
 
-    fetchFields();
+    fetchFieldsAndCount();
 
-    // Clear other tabs data when object changes
+    // Clear provider-specific metadata when object changes
     setValidationRules([]);
     setTriggers([]);
     setApexClasses([]);
     setWorkflows([]);
+    setConstraints([]);
     setActiveTab('Fields');
-  }, [selectedObject, instanceUrl, token, fieldsData]);
+  }, [selectedObject, selectedConnectionId, fieldsData]);
 
-  // Fetch other metadata types on tab switch
+  // ── Fetch other metadata types on tab switch ──
   const fetchMetadataByType = useCallback(
     async (type: string) => {
-      if (!token || !instanceUrl || !selectedObject) return;
+      if (!selectedConnectionId || !selectedObject) return;
 
+      // Guard against re-fetching cached data
       if (type === 'validationRules' && validationRules.length > 0) return;
       if (type === 'triggers' && triggers.length > 0) return;
       if (type === 'apexClasses' && apexClasses.length > 0) return;
       if (type === 'workflows' && workflows.length > 0) return;
+      if (type === 'constraints' && constraints.length > 0) return;
 
       try {
-        const res = await fetch('/api/objectMetadata', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token, instanceUrl, selectedObject, type }),
-        });
+        const res = await fetch(
+          `/api/connections/${selectedConnectionId}/metadata?object=${encodeURIComponent(selectedObject)}&type=${encodeURIComponent(type)}`
+        );
         const data = await res.json();
         if (data.success) {
           switch (type) {
@@ -366,13 +346,24 @@ export default function MetadataPage() {
             case 'workflows':
               setWorkflows(data.data);
               break;
+            case 'constraints':
+              setConstraints(data.data);
+              break;
           }
         }
       } catch (err) {
         console.error(`Error fetching ${type}:`, err);
       }
     },
-    [token, instanceUrl, selectedObject, validationRules, triggers, apexClasses, workflows]
+    [
+      selectedConnectionId,
+      selectedObject,
+      validationRules,
+      triggers,
+      apexClasses,
+      workflows,
+      constraints,
+    ]
   );
 
   useEffect(() => {
@@ -380,6 +371,7 @@ export default function MetadataPage() {
     else if (activeTab === 'Triggers') fetchMetadataByType('triggers');
     else if (activeTab === 'Apex Classes') fetchMetadataByType('apexClasses');
     else if (activeTab === 'Workflows') fetchMetadataByType('workflows');
+    else if (activeTab === 'Constraints') fetchMetadataByType('constraints');
   }, [activeTab, selectedObject, fetchMetadataByType]);
 
   return (
@@ -394,13 +386,12 @@ export default function MetadataPage() {
         <Paper radius="xl" shadow="xl" p="xl" withBorder>
           <Stack gap="lg">
             <OrgHeader
-              title="Salesforce Metadata Explorer"
-              description="Analyze objects, fields, and automation in your Salesforce org."
-              orgs={orgs}
-              selectedOrgId={selectedOrgId}
-              onSelectOrg={selectOrg}
-              orgLoading={orgLoading}
-              selectedOrgMeta={selectedOrgMeta}
+              title="Metadata Explorer"
+              description="Analyze objects, fields, and automation in your connected data sources."
+              connections={connections}
+              connectionsLoading={connectionsLoading}
+              selectedConnectionId={selectedConnectionId}
+              onSelectConnection={selectConnection}
             />
 
             {/* Object Selection + Info Section */}
@@ -418,7 +409,7 @@ export default function MetadataPage() {
                       setSelectedObject(Array.isArray(val) ? val[0] || '' : val)
                     }
                     placeholder={objectsLoading ? 'Loading Objects...' : '— Choose Object —'}
-                    disabled={!selectedOrgId || objectsLoading}
+                    disabled={!selectedConnectionId || objectsLoading}
                   />
                 </Box>
 
@@ -455,11 +446,11 @@ export default function MetadataPage() {
               </Group>
             </Paper>
 
-            {/* Tabs */}
+            {/* Tabs — content changes by provider */}
             {selectedObject && (
               <Tabs value={activeTab} onChange={setActiveTab}>
                 <Tabs.List mb="md">
-                  {TABS.map((tab) => (
+                  {tabs.map((tab) => (
                     <Tabs.Tab key={tab} value={tab}>
                       {tab}
                     </Tabs.Tab>
@@ -474,8 +465,7 @@ export default function MetadataPage() {
                       fieldsData={fieldsData}
                       allMetadataKeys={ALL_METADATA_KEYS}
                       objects={objects}
-                      token={token}
-                      instanceUrl={instanceUrl}
+                      connectionId={selectedConnectionId || ''}
                     />
                   </Tabs.Panel>
 
@@ -483,26 +473,80 @@ export default function MetadataPage() {
                     <FieldAnalysisTable
                       fields={fieldsData[selectedObject] || []}
                       objectName={selectedObject}
-                      token={token}
-                      instanceUrl={instanceUrl}
+                      connectionId={selectedConnectionId || ''}
                     />
                   </Tabs.Panel>
 
-                  <Tabs.Panel value="Validation Rules" h="100%">
-                    <ValidationRulesTable data={validationRules} />
-                  </Tabs.Panel>
+                  {connectionType === 'salesforce' && (
+                    <>
+                      <Tabs.Panel value="Validation Rules" h="100%">
+                        <ValidationRulesTable data={validationRules} />
+                      </Tabs.Panel>
 
-                  <Tabs.Panel value="Triggers" h="100%">
-                    <TriggersTable data={triggers} />
-                  </Tabs.Panel>
+                      <Tabs.Panel value="Triggers" h="100%">
+                        <TriggersTable data={triggers} />
+                      </Tabs.Panel>
 
-                  <Tabs.Panel value="Apex Classes" h="100%">
-                    <ApexClassesTable data={apexClasses} />
-                  </Tabs.Panel>
+                      <Tabs.Panel value="Apex Classes" h="100%">
+                        <ApexClassesTable data={apexClasses} />
+                      </Tabs.Panel>
 
-                  <Tabs.Panel value="Workflows" h="100%">
-                    <WorkflowsTable data={workflows} />
-                  </Tabs.Panel>
+                      <Tabs.Panel value="Workflows" h="100%">
+                        <WorkflowsTable data={workflows} />
+                      </Tabs.Panel>
+                    </>
+                  )}
+
+                  {connectionType === 'snowflake' && (
+                    <Tabs.Panel value="Constraints" h="100%">
+                      {constraints.length > 0 ? (
+                        <Box style={{ overflow: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                {(constraints[0] ? Object.keys(constraints[0]) : []).map((key) => (
+                                  <th
+                                    key={key}
+                                    style={{
+                                      padding: '8px 12px',
+                                      textAlign: 'left',
+                                      borderBottom: '2px solid #dee2e6',
+                                      fontSize: '0.85rem',
+                                    }}
+                                  >
+                                    {key}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {constraints.map((row, i) => (
+                                <tr key={i}>
+                                  {Object.values(row).map((val, j) => (
+                                    <td
+                                      key={j}
+                                      style={{
+                                        padding: '6px 12px',
+                                        borderBottom: '1px solid #eee',
+                                        fontSize: '0.85rem',
+                                      }}
+                                    >
+                                      {String(val ?? '—')}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </Box>
+                      ) : (
+                        <EmptyState
+                          title="No Constraints"
+                          description="No constraints found for this table."
+                        />
+                      )}
+                    </Tabs.Panel>
+                  )}
                 </Box>
               </Tabs>
             )}

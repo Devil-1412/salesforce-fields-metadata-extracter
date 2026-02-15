@@ -2,7 +2,7 @@
 
 import EmptyState from '@components/EmptyState';
 import FilterBar from '@components/FilterBar';
-import OrgHeader from '@components/OrgHeader';
+import OrgHeader, { type Connection } from '@components/OrgHeader';
 import {
   Alert,
   Anchor,
@@ -26,24 +26,14 @@ import ObjectFilter from './components/ObjectFilter';
 import ObjectsTable from './components/ObjectsTable';
 import StatsCards from './components/StatsCards';
 
-interface Org {
-  instance_url?: string;
-  instanceUrl?: string;
-  org_name?: string;
-  orgName?: string;
-}
-
-interface OrgMeta {
-  accessToken: string;
-  instanceUrl: string;
-  [key: string]: unknown;
-}
-
-interface SalesforceObject {
+interface TableObject {
   name: string;
   label: string;
   custom?: boolean;
   keyPrefix?: string;
+  schema?: string;
+  rowCount?: number;
+  comment?: string;
   createdDate?: string;
   createdByName?: string;
   lastModifiedDate?: string;
@@ -66,121 +56,97 @@ function formatLargeNumber(value: number | string | undefined): string {
 
 export default function ObjectAnalysisPage() {
   const router = useRouter();
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgLoading, setOrgLoading] = useState(true);
-  const [orgError, setOrgError] = useState('');
-  const [selectedOrgId, setSelectedOrgId] = useState('');
-  const [selectedOrgMeta, setSelectedOrgMeta] = useState<OrgMeta | null>(null);
-  const [instanceUrl, setInstanceUrl] = useState('');
-  const [token, setToken] = useState('');
-  const [objects, setObjects] = useState<SalesforceObject[]>([]);
+
+  // ── Connection state ──
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [connectionsError, setConnectionsError] = useState('');
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+
+  // ── Data state ──
+  const [objects, setObjects] = useState<TableObject[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [counts, setCounts] = useState<Record<string, number | string>>({});
   const [countLoadingFor, setCountLoadingFor] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const [selectedObject, setSelectedObject] = useState<SalesforceObject | null>(null);
+  const [selectedObject, setSelectedObject] = useState<TableObject | null>(null);
 
-  const loadOrgs = useCallback(async () => {
-    setOrgLoading(true);
-    setOrgError('');
+  // ── Load connections on mount ──
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    setConnectionsError('');
     try {
-      const res = await fetch('/api/listAllOrgs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const res = await fetch('/api/connections');
       const data = await res.json();
-      if (!data.success || !Array.isArray(data.organizations)) {
-        throw new Error(data.error || 'Could not fetch organizations.');
+      if (!data.success || !Array.isArray(data.connections)) {
+        throw new Error(data.error || 'Could not fetch connections.');
       }
-      setOrgs(data.organizations);
+      setConnections(data.connections);
     } catch (error) {
-      const message = (error as Error)?.message || 'Unable to load organizations.';
-      setOrgError(message);
+      const message = (error as Error)?.message || 'Unable to load connections.';
+      setConnectionsError(message);
       toast.error(message);
     } finally {
-      setOrgLoading(false);
+      setConnectionsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadOrgs();
-  }, [loadOrgs]);
+    loadConnections();
+  }, [loadConnections]);
 
-  const selectOrg = useCallback(
-    async (instanceValue: string, { silent = false } = {}) => {
-      if (!instanceValue) return;
-      const org = orgs.find(
-        (item) => item.instance_url === instanceValue || item.instanceUrl === instanceValue
-      );
-      if (!org) return;
+  // ── Select connection ──
+  const selectConnection = useCallback(
+    async (connectionId: string) => {
+      if (!connectionId) return;
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn) return;
 
-      const targetInstanceUrl = org.instance_url || org.instanceUrl || '';
-      const toastId = !silent
-        ? toast.loading(`Logging in to ${org.org_name || 'Salesforce'}...`)
-        : null;
+      setSelectedConnectionId(connectionId);
+      setCounts({});
+      setObjects([]);
+      setSelectedObject(null);
 
-      try {
-        const res = await fetch('/api/salesforceLogin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          setSelectedOrgId(targetInstanceUrl);
-          setSelectedOrgMeta({
-            ...org,
-            accessToken: data.accessToken,
-            instanceUrl: targetInstanceUrl,
-          } as OrgMeta);
-          setToken(data.accessToken);
-          setInstanceUrl(targetInstanceUrl);
-          setCounts({});
-          localStorage.setItem('accessToken', data.accessToken);
-          localStorage.setItem('instanceUrl', targetInstanceUrl);
-
-          if (!silent && toastId) {
-            toast.success(
-              `Loaded ${data.orgName && data.orgName !== 'None' ? data.orgName : 'Salesforce organization'}`,
-              { id: toastId }
-            );
+      // For Salesforce connections, initialise the session server-side
+      if (conn.connection_type === 'salesforce') {
+        const toastId = toast.loading(`Connecting to ${conn.display_name}...`);
+        try {
+          const res = await fetch(`/api/connections/${connectionId}`, { method: 'GET' });
+          const data = await res.json();
+          if (data.success && data.connection?.healthy) {
+            toast.success(`Connected to ${conn.display_name}`, { id: toastId });
+          } else {
+            toast.error('Connection unhealthy — check credentials', { id: toastId });
           }
-        } else {
-          if (toastId) toast.error(data.error || 'Login failed', { id: toastId });
+        } catch {
+          toast.error('Failed to verify connection', { id: toastId });
         }
-      } catch (err) {
-        console.error('Login failed', err);
-        if (toastId) toast.error('Login failed', { id: toastId });
+      } else {
+        toast.success(`Selected ${conn.display_name}`);
       }
     },
-    [orgs]
+    [connections]
   );
 
+  // ── Load objects/tables ──
   const loadObjects = useCallback(
     async ({ showToast = false } = {}) => {
-      if (!instanceUrl || !token) {
+      if (!selectedConnectionId) {
         setObjects([]);
         return;
       }
       setLoading(true);
       setFetchError('');
       try {
-        const res = await fetch('/api/objects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token, instanceUrl }),
-        });
+        const res = await fetch(`/api/connections/${selectedConnectionId}/tables`);
         const data = await res.json();
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Could not load objects.');
         }
-        setObjects(Array.isArray(data.object) ? data.object : []);
-        if (showToast) {
-          toast.success('Object list refreshed');
-        }
+        setObjects(Array.isArray(data.tables) ? data.tables : []);
+        if (showToast) toast.success('Object list refreshed');
       } catch (error) {
         const message = (error as Error)?.message || 'Unable to load objects.';
         setFetchError(message);
@@ -190,15 +156,14 @@ export default function ObjectAnalysisPage() {
         setLoading(false);
       }
     },
-    [instanceUrl, token]
+    [selectedConnectionId]
   );
 
   useEffect(() => {
-    if (instanceUrl && token) {
-      loadObjects();
-    }
-  }, [instanceUrl, token, loadObjects]);
+    if (selectedConnectionId) loadObjects();
+  }, [selectedConnectionId, loadObjects]);
 
+  // ── Filtering ──
   const filteredObjects = useMemo(() => {
     const query = search.trim().toLowerCase();
     return objects.filter((object) => {
@@ -218,19 +183,18 @@ export default function ObjectAnalysisPage() {
     return { total, custom, standard };
   }, [objects]);
 
+  // ── Fetch record count ──
   const fetchRecordCount = useCallback(
     async (objectName: string) => {
-      if (!instanceUrl || !token) {
-        toast.error('Select an organization before fetching record counts.');
+      if (!selectedConnectionId) {
+        toast.error('Select a connection before fetching record counts.');
         return;
       }
       setCountLoadingFor(objectName);
       try {
-        const res = await fetch('/api/getRecordCount', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceUrl, accessToken: token, objectName }),
-        });
+        const res = await fetch(
+          `/api/connections/${selectedConnectionId}/record-count?object=${encodeURIComponent(objectName)}`
+        );
         const data = await res.json();
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Failed to fetch record count.');
@@ -245,24 +209,19 @@ export default function ObjectAnalysisPage() {
         setCountLoadingFor('');
       }
     },
-    [instanceUrl, token]
+    [selectedConnectionId]
   );
 
-  const handleObjectClick = async (object: SalesforceObject) => {
-    if (!instanceUrl || !token) return;
+  // ── Fetch object details (describe) ──
+  const handleObjectClick = async (object: TableObject) => {
+    if (!selectedConnectionId) return;
 
     const toastId = toast.loading(`Fetching details for ${object.label}...`);
 
     try {
-      const res = await fetch('/api/getObjectDetails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accessToken: token,
-          instanceUrl,
-          objectName: object.name,
-        }),
-      });
+      const res = await fetch(
+        `/api/connections/${selectedConnectionId}/describe?object=${encodeURIComponent(object.name)}`
+      );
       const data = await res.json();
 
       if (data.success) {
@@ -277,24 +236,33 @@ export default function ObjectAnalysisPage() {
     }
   };
 
+  // ── Handle connection reset ──
+  const resetState = () => {
+    setSelectedConnectionId(null);
+    setObjects([]);
+    setCounts({});
+    setSelectedObject(null);
+    setSearch('');
+    setFilter('all');
+  };
+
   return (
     <Box bg="gray.0" style={{ minHeight: '100vh' }} py="md" px="sm">
       <Container size="xl">
         <Stack gap="md">
           <OrgHeader
-            title="Salesforce Object Analysis"
-            description="Browse your Salesforce sObjects, understand their origin, and quickly extract metadata for analysis."
-            orgs={orgs}
-            selectedOrgId={selectedOrgId}
-            onSelectOrg={selectOrg}
-            orgLoading={orgLoading}
-            selectedOrgMeta={selectedOrgMeta}
+            title="Object Analysis"
+            description="Browse your sObjects or tables, understand their structure, and extract metadata for analysis."
+            connections={connections}
+            connectionsLoading={connectionsLoading}
+            selectedConnectionId={selectedConnectionId}
+            onSelectConnection={selectConnection}
           />
 
-          {orgError && (
+          {connectionsError && (
             <Alert color="red" radius="lg">
-              {orgError}{' '}
-              {!orgLoading && !orgs.length && (
+              {connectionsError}{' '}
+              {!connectionsLoading && !connections.length && (
                 <Anchor onClick={() => router.push('/profile')}>Add one in your profile</Anchor>
               )}
             </Alert>
@@ -306,7 +274,7 @@ export default function ObjectAnalysisPage() {
               <Group>
                 <Button
                   onClick={() => loadObjects({ showToast: true })}
-                  disabled={!selectedOrgId || loading}
+                  disabled={!selectedConnectionId || loading}
                   loading={loading}
                   variant="gradient"
                   gradient={{ from: 'blue', to: 'indigo' }}

@@ -1,91 +1,167 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
-import Editor from 'react-simple-code-editor';
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-sql';
 import {
-  Box,
-  Container,
-  Paper,
-  Text,
-  Group,
-  Button,
-  Stack,
-  Center,
-  Loader,
   Alert,
-  Code,
   Badge,
+  Box,
+  Button,
+  Code,
+  Container,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
 } from '@mantine/core';
-import {
-  IconPlayerPlay,
-  IconDeviceFloppy,
-  IconPalette,
-  IconKeyboard,
-} from '@tabler/icons-react';
+import { IconDeviceFloppy, IconKeyboard, IconPlayerPlay } from '@tabler/icons-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 
-import OrgHeader from '@components/OrgHeader';
 import ConfirmDialog from '@components/ConfirmDialog';
+import OrgHeader, { type Connection } from '@components/OrgHeader';
 
 // Co-located components
-import SaveQueryModal from './components/SaveQueryModal';
-import FilterModal from './components/FilterModal';
-import SavedQueriesList from './components/SavedQueriesList';
 import ResultsTable from './components/ResultsTable';
-import ThemePickerModal from './components/ThemePickerModal';
+import SavedQueriesList from './components/SavedQueriesList';
+import SaveQueryModal from './components/SaveQueryModal';
 
-const THEMES = [
-  { id: 'prism-tomorrow.css', label: 'Tomorrow Night' },
-  { id: 'prism-coy.css', label: 'Coy' },
-  { id: 'prism-dark.css', label: 'Dark' },
-  { id: 'prism-funky.css', label: 'Funky' },
-  { id: 'prism-okaidia.css', label: 'Okaidia' },
-  { id: 'prism-solarizedlight.css', label: 'Solarized Light' },
-  { id: 'prism-twilight.css', label: 'Twilight' },
-  { id: 'prism-atom-dark.css', label: 'Atom Dark' },
-  { id: 'prism-dracula.css', label: 'Dracula' },
-  { id: 'prism-gruvbox-dark.css', label: 'Gruvbox Dark' },
-  { id: 'prism-material-dark.css', label: 'Material Dark' },
-  { id: 'prism-material-light.css', label: 'Material Light' },
-  { id: 'prism-material-oceanic.css', label: 'Material Oceanic' },
-  { id: 'prism-night-owl.css', label: 'Night Owl' },
-  { id: 'prism-nord.css', label: 'Nord' },
-  { id: 'prism-one-dark.css', label: 'One Dark' },
-  { id: 'prism-one-light.css', label: 'One Light' },
-  { id: 'prism-shades-of-purple.css', label: 'Shades of Purple' },
-  { id: 'prism-synthwave84.css', label: "Synthwave '84" },
-  { id: 'prism-vs.css', label: 'VS Code' },
-  { id: 'prism-vsc-dark-plus.css', label: 'VSC Dark Plus' },
-  { id: 'prism.css', label: 'Default' },
-];
+// ── CodeMirror ──
+import { autocompletion, type Completion, type CompletionContext } from '@codemirror/autocomplete';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { sql, StandardSQL } from '@codemirror/lang-sql';
+import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
+import { EditorState } from '@codemirror/state';
+import { placeholder as cmPlaceholder, EditorView, keymap } from '@codemirror/view';
 
-const SOQL_KEYWORDS = [
-  'SELECT', 'FROM', 'WHERE', 'ORDER BY', 'GROUP BY', 'HAVING',
-  'LIMIT', 'OFFSET', 'FOR VIEW', 'FOR REFERENCE',
-  'AND', 'OR', 'NOT', 'IN', 'NOT IN', 'INCLUDES', 'EXCLUDES', 'LIKE',
-  'ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST',
-  'COUNT', 'SUM', 'AVG', 'MIN', 'MAX',
-  'TRUE', 'FALSE', 'NULL',
-  'TODAY', 'YESTERDAY', 'TOMORROW',
-  'LAST_WEEK', 'THIS_WEEK', 'NEXT_WEEK',
-  'LAST_MONTH', 'THIS_MONTH', 'NEXT_MONTH',
-];
+// ── Provider-specific keyword completions ──
+const SOQL_KEYWORDS: Completion[] = [
+  'SELECT',
+  'FROM',
+  'WHERE',
+  'ORDER BY',
+  'GROUP BY',
+  'HAVING',
+  'LIMIT',
+  'OFFSET',
+  'AND',
+  'OR',
+  'NOT',
+  'IN',
+  'LIKE',
+  'ASC',
+  'DESC',
+  'NULLS FIRST',
+  'NULLS LAST',
+  'COUNT',
+  'SUM',
+  'AVG',
+  'MIN',
+  'MAX',
+  'TRUE',
+  'FALSE',
+  'NULL',
+  'INCLUDES',
+  'EXCLUDES',
+  'FOR VIEW',
+  'FOR REFERENCE',
+  'TODAY',
+  'YESTERDAY',
+  'TOMORROW',
+  'LAST_WEEK',
+  'THIS_WEEK',
+  'NEXT_WEEK',
+  'LAST_MONTH',
+  'THIS_MONTH',
+  'NEXT_MONTH',
+  'LAST_QUARTER',
+  'THIS_QUARTER',
+  'LAST_YEAR',
+  'THIS_YEAR',
+  'LAST_N_DAYS',
+  'NEXT_N_DAYS',
+  'TYPEOF',
+  'END',
+  'WITH DATA CATEGORY',
+  'ROLLUP',
+  'CUBE',
+].map((kw) => ({ label: kw, type: 'keyword' }));
 
-interface Org {
-  instanceUrl?: string;
-  instance_url?: string;
-  orgName?: string;
-  org_name?: string;
-  [key: string]: unknown;
-}
+const SQL_KEYWORDS: Completion[] = [
+  'SELECT',
+  'FROM',
+  'WHERE',
+  'ORDER BY',
+  'GROUP BY',
+  'HAVING',
+  'LIMIT',
+  'OFFSET',
+  'AND',
+  'OR',
+  'NOT',
+  'IN',
+  'LIKE',
+  'ILIKE',
+  'JOIN',
+  'INNER JOIN',
+  'LEFT JOIN',
+  'RIGHT JOIN',
+  'FULL JOIN',
+  'CROSS JOIN',
+  'ON',
+  'USING',
+  'UNION',
+  'UNION ALL',
+  'INTERSECT',
+  'EXCEPT',
+  'ASC',
+  'DESC',
+  'NULLS FIRST',
+  'NULLS LAST',
+  'BETWEEN',
+  'IS NULL',
+  'IS NOT NULL',
+  'EXISTS',
+  'ANY',
+  'ALL',
+  'CASE',
+  'WHEN',
+  'THEN',
+  'ELSE',
+  'END',
+  'CAST',
+  'COALESCE',
+  'NULLIF',
+  'IFNULL',
+  'NVL',
+  'COUNT',
+  'SUM',
+  'AVG',
+  'MIN',
+  'MAX',
+  'DISTINCT',
+  'WITH',
+  'AS',
+  'OVER',
+  'PARTITION BY',
+  'ROW_NUMBER',
+  'RANK',
+  'DENSE_RANK',
+  'TRUE',
+  'FALSE',
+  'NULL',
+  'SHOW',
+  'DESCRIBE',
+  'EXPLAIN',
+  'LATERAL',
+  'FLATTEN',
+  'QUALIFY',
+  'PIVOT',
+  'UNPIVOT',
+].map((kw) => ({ label: kw, type: 'keyword' }));
 
-interface OrgMeta extends Org {
-  accessToken?: string;
-}
-
+// ── Interfaces ──
 interface SavedQuery {
   id: string;
   name: string;
@@ -102,39 +178,25 @@ interface QueryResults {
   totalSize: number;
 }
 
-interface ColumnFilter {
-  type: string;
-  value: string;
-}
+// ── Default queries per connection type ──
+const DEFAULT_QUERIES: Record<string, string> = {
+  salesforce: 'SELECT Id, Name, CreatedDate FROM Account LIMIT 10',
+  snowflake: 'SELECT * FROM INFORMATION_SCHEMA.TABLES LIMIT 10',
+};
 
-interface Suggestion {
-  text: string;
-  label?: string;
-  type: string;
-}
+const PAGE_SIZE = 250;
 
-interface ObjectMeta {
-  name: string;
-  label: string;
-}
-
-interface FieldMeta {
-  name: string;
-  label: string;
-  type: string;
-}
-
-export default function SoqlPage() {
+export default function QueryPage() {
   const router = useRouter();
-  
-  // Org state
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [orgLoading, setOrgLoading] = useState(true);
-  const [orgError, setOrgError] = useState('');
-  const [selectedOrgId, setSelectedOrgId] = useState('');
-  const [selectedOrgMeta, setSelectedOrgMeta] = useState<OrgMeta | null>(null);
-  const [instanceUrl, setInstanceUrl] = useState('');
-  const [token, setToken] = useState('');
+
+  // Connection state
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const selectedConnection = useMemo(
+    () => connections.find((c) => c.id === selectedConnectionId) ?? null,
+    [connections, selectedConnectionId]
+  );
 
   // Query state
   const [query, setQuery] = useState('SELECT Id, Name, CreatedDate FROM Account LIMIT 10');
@@ -142,23 +204,11 @@ export default function SoqlPage() {
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState('');
 
-  // Theme state
-  const [theme, setTheme] = useState('prism-tomorrow.css');
-  const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
-  const [originalTheme, setOriginalTheme] = useState('');
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  // Autocomplete state
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
-  const [cursorPosition, setCursorPosition] = useState(0);
-  const [objectsCache, setObjectsCache] = useState<ObjectMeta[]>([]);
-  const [fieldsCache, setFieldsCache] = useState<Record<string, FieldMeta[]>>({});
-  const [loadingMetadata, setLoadingMetadata] = useState(false);
+  // Pagination state
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Saved queries state
   const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
@@ -170,135 +220,220 @@ export default function SoqlPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [queryToDelete, setQueryToDelete] = useState<SavedQuery | null>(null);
 
-  // Filtering state
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>({});
-  const [activeFilterColumn, setActiveFilterColumn] = useState<string | null>(null);
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [filterType, setFilterType] = useState('contains');
-  const [filterValue, setFilterValue] = useState('');
+  // CodeMirror ref
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
 
-  // Theme effect
+  // ── Choose keyword completions based on connection type ──
+  const keywordCompletions = useMemo(() => {
+    if (!selectedConnection) return SQL_KEYWORDS;
+    return selectedConnection.connection_type === 'salesforce' ? SOQL_KEYWORDS : SQL_KEYWORDS;
+  }, [selectedConnection]);
+
+  // ── CodeMirror setup ──
   useEffect(() => {
-    const linkId = 'prism-theme-link';
-    let link = document.getElementById(linkId) as HTMLLinkElement | null;
+    if (!editorContainerRef.current) return;
 
-    if (!link) {
-      link = document.createElement('link');
-      link.id = linkId;
-      link.rel = 'stylesheet';
-      document.head.appendChild(link);
+    // Destroy existing editor
+    if (editorViewRef.current) {
+      editorViewRef.current.destroy();
+      editorViewRef.current = null;
     }
 
-    link.href = `/themes/${theme}`;
-  }, [theme]);
+    const executeQueryKeymap = keymap.of([
+      {
+        key: 'Ctrl-Enter',
+        run: () => {
+          // We'll trigger execute via a custom DOM event
+          editorContainerRef.current?.dispatchEvent(new CustomEvent('cm-execute'));
+          return true;
+        },
+      },
+      {
+        key: 'Mod-Enter',
+        run: () => {
+          editorContainerRef.current?.dispatchEvent(new CustomEvent('cm-execute'));
+          return true;
+        },
+      },
+    ]);
 
-  const openThemePicker = () => {
-    setOriginalTheme(theme);
-    setIsThemePickerOpen(true);
-  };
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: query,
+        extensions: [
+          // Keymaps
+          executeQueryKeymap,
+          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+          history(),
 
-  const closeThemePicker = (save = false) => {
-    if (!save) {
-      setTheme(originalTheme);
-    }
-    setIsThemePickerOpen(false);
-  };
+          // SQL syntax highlighting (no schema completions)
+          sql({ dialect: StandardSQL, upperCaseKeywords: true }),
 
-  // Load orgs
-  const loadOrgs = useCallback(async () => {
-    setOrgLoading(true);
-    setOrgError('');
+          // Keyword-only autocomplete
+          autocompletion({
+            activateOnTyping: true,
+            override: [
+              (context: CompletionContext) => {
+                const word = context.matchBefore(/\w*/);
+                if (!word || (word.from === word.to && !context.explicit)) return null;
+                return {
+                  from: word.from,
+                  options: keywordCompletions,
+                  filter: true,
+                };
+              },
+            ],
+          }),
+
+          // Appearance (light theme)
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          bracketMatching(),
+          highlightSelectionMatches(),
+          cmPlaceholder('Enter your query here...'),
+
+          // Update handler
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              setQuery(update.state.doc.toString());
+            }
+          }),
+
+          // Styling — light editor theme
+          EditorView.theme({
+            '&': {
+              minHeight: '150px',
+              fontSize: '14px',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              backgroundColor: '#f8f9fa',
+            },
+            '.cm-scroller': { overflow: 'auto' },
+            '.cm-content': {
+              fontFamily: '"Fira Code", "Fira Mono", monospace',
+              caretColor: '#4f46e5',
+            },
+            '&.cm-focused': { outline: '2px solid #4f46e5', outlineOffset: '-2px' },
+            '.cm-activeLine': { backgroundColor: '#e8e8ff30' },
+            '.cm-selectionBackground, ::selection': { backgroundColor: '#c8c8ff40 !important' },
+            '.cm-gutters': {
+              backgroundColor: '#f0f0f5',
+              borderRight: '1px solid #ddd',
+              color: '#999',
+            },
+          }),
+        ],
+      }),
+      parent: editorContainerRef.current,
+    });
+
+    editorViewRef.current = view;
+
+    return () => {
+      view.destroy();
+    };
+    // We intentionally only re-create the editor when keywords change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keywordCompletions]);
+
+  // ── Listen for Ctrl+Enter from CodeMirror ──
+  useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+    const handler = () => executeQuery();
+    container.addEventListener('cm-execute', handler);
+    return () => container.removeEventListener('cm-execute', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConnectionId, query]);
+
+  // ── Load connections ──
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
     try {
-      const res = await fetch('/api/listAllOrgs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const res = await fetch('/api/connections');
       const data = await res.json();
-      if (!data.success || !Array.isArray(data.organizations)) {
-        throw new Error(data.error || 'Could not fetch organizations.');
+      if (data.success && Array.isArray(data.connections)) {
+        setConnections(data.connections);
       }
-      setOrgs(data.organizations);
     } catch (err) {
-      setOrgError((err as Error)?.message || 'Unable to load organizations.');
+      console.error('Failed to load connections', err);
     } finally {
-      setOrgLoading(false);
+      setConnectionsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadOrgs();
-  }, [loadOrgs]);
+    loadConnections();
+  }, [loadConnections]);
 
-  const selectOrg = useCallback(
-    async (instanceValue: string, { silent = false } = {}) => {
-      if (!instanceValue) return;
-      const org = orgs.find(
-        (item) => item.instance_url === instanceValue || item.instanceUrl === instanceValue
-      );
-      if (!org) return;
+  // ── Select connection & fetch table names only (1 API call) ──
+  const selectConnection = useCallback(
+    async (connectionId: string) => {
+      if (!connectionId) return;
+      const conn = connections.find((c) => c.id === connectionId);
+      if (!conn) return;
 
-      const targetInstanceUrl = org.instance_url || org.instanceUrl || '';
-      const toastId = !silent ? toast.loading(`Logging in to ${org.org_name || 'Salesforce'}...`) : null;
+      setSelectedConnectionId(connectionId);
+      setResults(null);
+      setError('');
+      setHasMore(false);
+      setCurrentOffset(0);
+
+      // Set default query for this connection type
+      const defaultQuery = DEFAULT_QUERIES[conn.connection_type] || 'SELECT 1';
+      setQuery(defaultQuery);
+
+      // Update CodeMirror content
+      if (editorViewRef.current) {
+        const currentDoc = editorViewRef.current.state.doc.toString();
+        if (currentDoc !== defaultQuery) {
+          editorViewRef.current.dispatch({
+            changes: { from: 0, to: currentDoc.length, insert: defaultQuery },
+          });
+        }
+      }
+
+      const toastId = toast.loading(`Connecting to ${conn.display_name}...`);
 
       try {
-        const res = await fetch('/api/salesforceLogin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceUrl: targetInstanceUrl }),
-        });
+        const res = await fetch(`/api/connections/${connectionId}`);
         const data = await res.json();
 
-        if (data.success) {
-          setSelectedOrgId(targetInstanceUrl);
-          setSelectedOrgMeta({ ...org, accessToken: data.accessToken, instanceUrl: targetInstanceUrl });
-          setToken(data.accessToken);
-          setInstanceUrl(targetInstanceUrl);
-          localStorage.setItem('accessToken', data.accessToken);
-          localStorage.setItem('instanceUrl', targetInstanceUrl);
-
-          if (!silent && toastId) {
-            toast.success(`Loaded ${data.orgName || 'Salesforce organization'}`, { id: toastId });
-          }
+        if (data.success && data.connection?.healthy) {
+          toast.success(`Connected to ${conn.display_name}`, { id: toastId });
         } else {
-          if (toastId) toast.error(data.error || 'Login failed', { id: toastId });
+          toast.error('Connection unhealthy — check credentials', { id: toastId });
         }
-      } catch (err) {
-        console.error('Login failed', err);
-        if (toastId) toast.error('Login failed', { id: toastId });
+      } catch {
+        toast.error('Failed to connect', { id: toastId });
       }
     },
-    [orgs]
+    [connections]
   );
 
-  useEffect(() => {
-    if (!orgs.length) return;
-    const savedInstance = localStorage.getItem('instanceUrl');
-    const initialOrg = orgs.find((org) => org.instanceUrl === savedInstance) || orgs[0];
-    if (initialOrg) {
-      selectOrg(initialOrg.instanceUrl || initialOrg.instance_url || '', { silent: true });
-    }
-  }, [orgs, selectOrg]);
-
-  // Execute query
-  const executeQuery = async () => {
-    if (!instanceUrl || !token) {
-      toast.error('Please select an organization first.');
+  // ── Execute query ──
+  const executeQuery = useCallback(async () => {
+    if (!selectedConnectionId) {
+      toast.error('Please select a connection first.');
       return;
     }
-    if (!query.trim()) {
-      toast.error('Please enter a SOQL query.');
+    const currentQuery = editorViewRef.current?.state.doc.toString() || query;
+    if (!currentQuery.trim()) {
+      toast.error('Please enter a query.');
       return;
     }
 
     setExecuting(true);
     setError('');
     setResults(null);
+    setCurrentOffset(0);
+    setHasMore(false);
 
     try {
-      const res = await fetch('/api/soql', {
+      const res = await fetch(`/api/connections/${selectedConnectionId}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token, instanceUrl, query }),
+        body: JSON.stringify({ query: currentQuery, limit: PAGE_SIZE, offset: 0 }),
       });
       const data = await res.json();
 
@@ -306,8 +441,14 @@ export default function SoqlPage() {
         throw new Error(data.error || 'Query execution failed.');
       }
 
-      setResults(data.data);
-      toast.success(`Query executed. Found ${data.data.totalSize} records.`);
+      // Normalise — the API may return { columns, rows } or { data: { records } }
+      const records = data.rows || data.data?.records || [];
+      const totalSize = data.totalSize ?? records.length;
+
+      setResults({ records, totalSize });
+      setHasMore(data.pagination?.hasMore ?? false);
+      setCurrentOffset(PAGE_SIZE);
+      toast.success(`Query executed. ${records.length} records returned.`);
     } catch (err) {
       const message = (err as Error).message;
       setError(message);
@@ -315,212 +456,65 @@ export default function SoqlPage() {
     } finally {
       setExecuting(false);
     }
-  };
+  }, [selectedConnectionId, query]);
 
-  // Sorting
-  const handleSort = (column: string) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  };
+  // ── Load more (infinite scroll) ──
+  const loadMoreResults = useCallback(async () => {
+    if (!selectedConnectionId || !hasMore || loadingMore) return;
+    const currentQuery = editorViewRef.current?.state.doc.toString() || query;
 
-  // Filtering
-  const getProcessedResults = (): QueryResults => {
-    if (!results || !results.records) return { records: [], totalSize: 0 };
+    setLoadingMore(true);
 
-    let filteredRecords = [...results.records];
-
-    // Apply filters
-    Object.entries(columnFilters).forEach(([column, filter]) => {
-      filteredRecords = filteredRecords.filter((record) => {
-        const value = record[column];
-        const filterVal = filter.value;
-
-        switch (filter.type) {
-          case 'equals':
-            return String(value).toLowerCase() === String(filterVal).toLowerCase();
-          case 'notEquals':
-            return String(value).toLowerCase() !== String(filterVal).toLowerCase();
-          case 'contains':
-            return String(value).toLowerCase().includes(String(filterVal).toLowerCase());
-          case 'startsWith':
-            return String(value).toLowerCase().startsWith(String(filterVal).toLowerCase());
-          case 'endsWith':
-            return String(value).toLowerCase().endsWith(String(filterVal).toLowerCase());
-          case 'greaterThan':
-            return Number(value) > Number(filterVal);
-          case 'lessThan':
-            return Number(value) < Number(filterVal);
-          case 'isNull':
-            return value == null || value === '';
-          case 'isNotNull':
-            return value != null && value !== '';
-          default:
-            return true;
-        }
-      });
-    });
-
-    // Apply sorting
-    if (sortColumn) {
-      filteredRecords.sort((a, b) => {
-        let aVal: unknown = a[sortColumn];
-        let bVal: unknown = b[sortColumn];
-
-        if (aVal == null && bVal == null) return 0;
-        if (aVal == null) return 1;
-        if (bVal == null) return -1;
-
-        // Convert to strings for comparison
-        const aStr = typeof aVal === 'object' ? JSON.stringify(aVal) : String(aVal);
-        const bStr = typeof bVal === 'object' ? JSON.stringify(bVal) : String(bVal);
-
-        return sortDirection === 'asc' ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr);
-      });
-    }
-
-    return { ...results, records: filteredRecords, totalSize: filteredRecords.length };
-  };
-
-  const openFilterModal = (column: string) => {
-    setActiveFilterColumn(column);
-    if (columnFilters[column]) {
-      setFilterType(columnFilters[column].type);
-      setFilterValue(columnFilters[column].value);
-    } else {
-      setFilterType('contains');
-      setFilterValue('');
-    }
-    setShowFilterModal(true);
-  };
-
-  const applyColumnFilter = () => {
-    if (!activeFilterColumn) return;
-
-    const needsValue = !['isNull', 'isNotNull'].includes(filterType);
-    if (needsValue && !filterValue.trim()) {
-      toast.error('Please enter a filter value');
-      return;
-    }
-
-    setColumnFilters((prev) => ({
-      ...prev,
-      [activeFilterColumn]: { type: filterType, value: filterValue },
-    }));
-
-    setShowFilterModal(false);
-    setActiveFilterColumn(null);
-    setFilterValue('');
-    toast.success(`Filter applied to ${activeFilterColumn}`);
-  };
-
-  const removeColumnFilter = (column: string) => {
-    setColumnFilters((prev) => {
-      const newFilters = { ...prev };
-      delete newFilters[column];
-      return newFilters;
-    });
-    toast.success(`Filter removed from ${column}`);
-  };
-
-  const clearAllFilters = () => {
-    setColumnFilters({});
-    toast.success('All filters cleared');
-  };
-
-  // Export CSV
-  const exportToCSV = () => {
-    const processedResults = getProcessedResults();
-    if (!processedResults.records?.length) {
-      toast.error('No data to export');
-      return;
-    }
-
-    const records = processedResults.records;
-    const columns = Object.keys(records[0]).filter((key) => key !== 'attributes');
-
-    const csvHeader = columns.join(',');
-    const csvRows = records.map((record) => {
-      return columns
-        .map((column) => {
-          const value = record[column];
-          if (value == null) return '';
-          if (typeof value === 'object') return JSON.stringify(value).replace(/"/g, '""');
-          const stringValue = String(value);
-          if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
-            return `"${stringValue.replace(/"/g, '""')}"`;
-          }
-          return stringValue;
-        })
-        .join(',');
-    });
-
-    const csv = [csvHeader, ...csvRows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.setAttribute('href', URL.createObjectURL(blob));
-    link.setAttribute('download', `soql_results_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast.success(`Exported ${records.length} records to CSV`);
-  };
-
-  // Fetch objects metadata
-  const fetchObjects = useCallback(async () => {
-    if (objectsCache.length > 0 || !instanceUrl || !token) return;
-
-    setLoadingMetadata(true);
     try {
-      const res = await fetch('/api/metadata/describe', {
+      const res = await fetch(`/api/connections/${selectedConnectionId}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token, instanceUrl, type: 'objects' }),
+        body: JSON.stringify({ query: currentQuery, limit: PAGE_SIZE, offset: currentOffset }),
       });
       const data = await res.json();
-      if (data.success) {
-        setObjectsCache(data.data);
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load more results.');
       }
+
+      const newRecords = data.rows || data.data?.records || [];
+
+      setResults((prev) => {
+        if (!prev) return { records: newRecords, totalSize: data.totalSize ?? newRecords.length };
+        return {
+          records: [...prev.records, ...newRecords],
+          totalSize: data.totalSize ?? prev.totalSize,
+        };
+      });
+
+      setHasMore(data.pagination?.hasMore ?? false);
+      setCurrentOffset((prev) => prev + PAGE_SIZE);
     } catch (err) {
-      console.error('Failed to fetch objects:', err);
+      console.error('Load more failed:', err);
+      toast.error('Failed to load more results');
     } finally {
-      setLoadingMetadata(false);
+      setLoadingMore(false);
     }
-  }, [instanceUrl, token, objectsCache.length]);
+  }, [selectedConnectionId, hasMore, loadingMore, currentOffset, query]);
 
-  // Fetch fields for object
-  const fetchFields = useCallback(
-    async (objectName: string) => {
-      if (fieldsCache[objectName] || !instanceUrl || !token) return;
-
-      try {
-        const res = await fetch('/api/metadata/describe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accessToken: token, instanceUrl, type: 'fields', objectName }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setFieldsCache((prev) => ({ ...prev, [objectName]: data.data.fields }));
-        }
-      } catch (err) {
-        console.error(`Failed to fetch fields for ${objectName}:`, err);
-      }
-    },
-    [instanceUrl, token, fieldsCache]
-  );
-
+  // ── IntersectionObserver for infinite scroll ──
   useEffect(() => {
-    if (instanceUrl && token) {
-      fetchObjects();
-    }
-  }, [instanceUrl, token, fetchObjects]);
+    if (!sentinelRef.current || !hasMore) return;
 
-  // Saved queries
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingMore) {
+          loadMoreResults();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loadMoreResults]);
+
+  // ── Saved queries ──
   const fetchSavedQueries = useCallback(async () => {
     try {
       const res = await fetch('/api/queries/list', {
@@ -548,10 +542,11 @@ export default function SoqlPage() {
 
     setSavingQuery(true);
     try {
+      const currentQuery = editorViewRef.current?.state.doc.toString() || query;
       const res = await fetch('/api/queries/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newQueryName, query }),
+        body: JSON.stringify({ name: newQueryName, query: currentQuery }),
       });
       const data = await res.json();
       if (data.success) {
@@ -603,78 +598,74 @@ export default function SoqlPage() {
 
   const loadSavedQuery = (savedQuery: SavedQuery) => {
     setQuery(savedQuery.query);
+    if (editorViewRef.current) {
+      const currentDoc = editorViewRef.current.state.doc.toString();
+      editorViewRef.current.dispatch({
+        changes: { from: 0, to: currentDoc.length, insert: savedQuery.query },
+      });
+    }
     toast.success(`Loaded query: ${savedQuery.name}`);
   };
 
-  // Editor handlers
-  const handleEditorKeyDown = (e: React.KeyboardEvent) => {
-    if (e.ctrlKey && e.key === 'Enter') {
-      e.preventDefault();
-      executeQuery();
-    }
-  };
+  // ── Derive page title & description ──
+  const pageTitle = useMemo(() => {
+    if (!selectedConnection) return 'Query Editor';
+    return selectedConnection.connection_type === 'salesforce'
+      ? 'SOQL Query Editor'
+      : 'SQL Query Editor';
+  }, [selectedConnection]);
+
+  const pageDescription = useMemo(() => {
+    if (!selectedConnection) return 'Select a connection to start querying.';
+    return selectedConnection.connection_type === 'salesforce'
+      ? 'Execute SOQL queries against your Salesforce organization.'
+      : `Execute SQL queries against ${selectedConnection.display_name}.`;
+  }, [selectedConnection]);
 
   return (
     <Box bg="gray.0" mih="100vh" py="lg" px="md">
       <Container size="xl">
         <Stack gap="lg">
           <OrgHeader
-            title="SOQL Query Editor"
-            description="Execute SOQL queries directly against your Salesforce organization."
-            orgs={orgs}
-            selectedOrgId={selectedOrgId}
-            onSelectOrg={selectOrg}
-            orgLoading={orgLoading}
-            selectedOrgMeta={selectedOrgMeta}
+            title={pageTitle}
+            description={pageDescription}
+            connections={connections}
+            connectionsLoading={connectionsLoading}
+            selectedConnectionId={selectedConnectionId}
+            onSelectConnection={selectConnection}
           />
 
-          <Group justify="flex-end">
-            <Button
-              variant="light"
-              size="xs"
-              leftSection={<IconPalette size={14} />}
-              onClick={openThemePicker}
-            >
-              Theme: {THEMES.find((t) => t.id === theme)?.label}
-            </Button>
-          </Group>
-
-          {orgError && (
-            <Alert color="red" title="Error">
-              {orgError}{' '}
-              {!orgLoading && !orgs.length && (
-                <Text
-                  component="a"
-                  td="underline"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => router.push('/profile')}
-                >
-                  Add one in your profile
-                </Text>
-              )}
+          {!connectionsLoading && connections.length === 0 && (
+            <Alert color="red" title="No Connections">
+              No connections found.{' '}
+              <Text
+                component="a"
+                td="underline"
+                style={{ cursor: 'pointer' }}
+                onClick={() => router.push('/profile')}
+              >
+                Add one in your profile
+              </Text>
             </Alert>
           )}
 
           {/* Query Editor Section */}
           <Paper radius="lg" p="lg" shadow="md" withBorder>
             <Stack gap="md">
-              <Text size="sm" fw={500}>
-                SOQL Query
-              </Text>
+              <Group justify="space-between">
+                <Text size="sm" fw={500}>
+                  {selectedConnection?.connection_type === 'salesforce' ? 'SOQL' : 'SQL'} Query
+                </Text>
+                {selectedConnection && (
+                  <Badge variant="light" size="sm">
+                    {selectedConnection.connection_type}
+                  </Badge>
+                )}
+              </Group>
+
+              {/* CodeMirror Editor */}
               <Paper radius="md" withBorder style={{ overflow: 'hidden' }}>
-                <Editor
-                  value={query}
-                  onValueChange={setQuery}
-                  onKeyDown={handleEditorKeyDown}
-                  highlight={(code) => highlight(code, languages.sql || {})}
-                  padding={16}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    backgroundColor: '#f8f9fa',
-                    minHeight: '150px',
-                  }}
-                />
+                <div ref={editorContainerRef} />
               </Paper>
 
               <Group justify="space-between">
@@ -683,7 +674,7 @@ export default function SoqlPage() {
                     leftSection={<IconPlayerPlay size={16} />}
                     onClick={executeQuery}
                     loading={executing}
-                    disabled={!query.trim()}
+                    disabled={!query.trim() || !selectedConnectionId}
                   >
                     Execute Query
                   </Button>
@@ -719,18 +710,27 @@ export default function SoqlPage() {
           )}
 
           {results && (
-            <ResultsTable
-              results={results}
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              columnFilters={columnFilters}
-              onOpenFilter={openFilterModal}
-              onRemoveFilter={removeColumnFilter}
-              onClearAllFilters={clearAllFilters}
-              onExportCSV={exportToCSV}
-              getProcessedResults={getProcessedResults}
-            />
+            <>
+              <ResultsTable results={results} />
+
+              {/* Infinite scroll sentinel */}
+              {hasMore && (
+                <Box ref={sentinelRef} ta="center" py="md">
+                  {loadingMore ? (
+                    <Group justify="center" gap="sm">
+                      <Loader size="sm" />
+                      <Text size="sm" c="dimmed">
+                        Loading more results...
+                      </Text>
+                    </Group>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Scroll down for more results
+                    </Text>
+                  )}
+                </Box>
+              )}
+            </>
           )}
         </Stack>
       </Container>
@@ -743,27 +743,6 @@ export default function SoqlPage() {
         setQueryName={setNewQueryName}
         onSave={handleSaveQuery}
         saving={savingQuery}
-      />
-
-      <FilterModal
-        opened={showFilterModal}
-        onClose={() => setShowFilterModal(false)}
-        column={activeFilterColumn}
-        filterType={filterType}
-        setFilterType={setFilterType}
-        filterValue={filterValue}
-        setFilterValue={setFilterValue}
-        onApply={applyColumnFilter}
-        onRemove={() => activeFilterColumn && removeColumnFilter(activeFilterColumn)}
-        hasExistingFilter={!!activeFilterColumn && !!columnFilters[activeFilterColumn]}
-      />
-
-      <ThemePickerModal
-        opened={isThemePickerOpen}
-        onClose={closeThemePicker}
-        themes={THEMES}
-        currentTheme={theme}
-        onThemeChange={setTheme}
       />
 
       <ConfirmDialog

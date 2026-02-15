@@ -5,7 +5,6 @@ import './globals.css';
 import { ColorSchemeScript, Container, Flex, MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import '@mantine/notifications/styles.css';
-import AuthSessionLayer from './components/AuthSessionLayer';
 import Footer from './components/Footer';
 import Navbar from './components/Navbar';
 import { AuthProvider } from './context/authContext';
@@ -58,7 +57,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <MantineProvider theme={theme} defaultColorScheme="light">
           <Notifications />
           <AuthProvider>
-            <AuthSessionLayer />
             <Flex display="flex" direction="column" mih="100vh">
               <Navbar />
               <Container size="xl" flex={1} w="100%" py="xl">

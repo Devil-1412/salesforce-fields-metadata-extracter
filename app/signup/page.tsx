@@ -1,26 +1,28 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
-import { IconUserPlus, IconCircleCheck } from '@tabler/icons-react';
-import Link from 'next/link';
-import toast from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
+import { GoogleIcon } from '@components/GoogleIcon';
 import {
+  Anchor,
+  Box,
+  Button,
+  Center,
+  Checkbox,
   Container,
+  Divider,
   Paper,
-  Title,
+  PasswordInput,
+  Stack,
   Text,
   TextInput,
-  PasswordInput,
-  Checkbox,
-  Button,
-  Anchor,
-  Stack,
-  Center,
   ThemeIcon,
-  Box,
-  Alert,
+  Title,
 } from '@mantine/core';
+import { IconCircleCheck, IconUserPlus } from '@tabler/icons-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { FormEvent, useState } from 'react';
+import toast from 'react-hot-toast';
+import { supabase } from '../utils/supabase';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -121,12 +123,7 @@ export default function SignupPage() {
           ) : (
             <form onSubmit={handleSignup}>
               <Stack mt="xl" gap="md">
-                <TextInput
-                  name="name"
-                  label="Full Name"
-                  placeholder="John Doe"
-                  required
-                />
+                <TextInput name="name" label="Full Name" placeholder="John Doe" required />
 
                 <TextInput
                   name="email"
@@ -136,12 +133,7 @@ export default function SignupPage() {
                   required
                 />
 
-                <PasswordInput
-                  name="password"
-                  label="Password"
-                  placeholder="••••••••"
-                  required
-                />
+                <PasswordInput name="password" label="Password" placeholder="••••••••" required />
 
                 <PasswordInput
                   name="confirm"
@@ -175,6 +167,31 @@ export default function SignupPage() {
                   size="md"
                 >
                   {loading ? 'Creating account...' : 'Create Account'}
+                </Button>
+
+                <Divider label="Or continue with" labelPosition="center" my="sm" />
+
+                <Button
+                  fullWidth
+                  variant="default"
+                  c="gray"
+                  leftSection={<GoogleIcon />}
+                  onClick={async () => {
+                    try {
+                      const { error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                          redirectTo: `${window.location.origin}/auth/callback`,
+                        },
+                      });
+                      if (error) throw error;
+                    } catch (error) {
+                      console.error('Google signup error:', error);
+                      toast.error('Could not initiate Google Signup');
+                    }
+                  }}
+                >
+                  Sign up with Google
                 </Button>
               </Stack>
             </form>

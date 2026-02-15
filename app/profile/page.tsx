@@ -1,34 +1,20 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
-import {
-  Box,
-  Container,
-  Grid,
-  Paper,
-  Center,
-  Loader,
-  Text,
-} from '@mantine/core';
+import { Box, Center, Container, Grid, Loader, Paper, Text } from '@mantine/core';
 import { useRouter } from 'next/navigation';
+import { FormEvent, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
-import { useAuth } from '../context/authContext';
-
-interface AuthContext {
-  user: User | null;
-  refreshUser: () => Promise<User | null>;
-  logout: (sessionExpired?: boolean) => Promise<void>;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-}
+import useUserAuthStore from '../../lib/store/userAuthStore';
 
 // Co-located components
+import OrganizationTab from './components/OrganizationTab';
+import PreferencesTab from './components/PreferencesTab';
 import ProfileSidebar from './components/ProfileSidebar';
 import ProfileTab from './components/ProfileTab';
-import OrganizationTab from './components/OrganizationTab';
 import SecurityTab from './components/SecurityTab';
-import PreferencesTab from './components/PreferencesTab';
+import { SnowflakeFormData } from './components/SnowflakeForm';
+import SnowflakeTab, { SnowflakeConnection } from './components/SnowflakeTab';
 import SupportTab from './components/SupportTab';
 
 interface User {
@@ -83,7 +69,9 @@ interface PasswordForm {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user: authUser, refreshUser } = useAuth() as AuthContext;
+  // Use Zustand Store
+  const { user: authUser, refreshProfile, logout } = useUserAuthStore();
+
   const [activeTab, setActiveTab] = useState('profile');
   const [user, setUser] = useState<User>({});
   const [organizations, setOrganizations] = useState<Organization[] | null>(null);
@@ -94,6 +82,18 @@ export default function ProfilePage() {
     securityToken: '',
     isSandbox: false,
   });
+  const [snowflakeConnections, setSnowflakeConnections] = useState<SnowflakeConnection[]>([]);
+  const [snowflakeForm, setSnowflakeForm] = useState<SnowflakeFormData>({
+    account: '',
+    username: '',
+    password: '',
+    warehouse: '',
+    database: '',
+    schema: '',
+    role: '',
+  });
+  const [snowflakeLoading, setSnowflakeLoading] = useState(false);
+
   const [showPassword, setShowPassword] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({
     theme: 'light',
@@ -115,13 +115,6 @@ export default function ProfilePage() {
     newPassword: '',
     confirmPassword: '',
   });
-
-  useEffect(() => {
-    if (authUser) {
-      setUser(authUser);
-      setLoading(false);
-    }
-  }, [authUser]);
 
   const fetchPreferences = async () => {
     try {
@@ -171,10 +164,90 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
+    if (authUser) {
+      setUser(authUser as unknown as User);
+      setLoading(false);
+    }
+  }, [authUser]);
+
+  // ... (fetch functions)
+
+  useEffect(() => {
     fetchOrgs();
     fetchPreferences();
     fetchSessions();
+    // Ensure profile is up to date
+    refreshProfile();
+    fetchSnowflakeConnections();
   }, []);
+
+  const fetchSnowflakeConnections = async () => {
+    try {
+      const res = await fetch('/api/snowflake/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSnowflakeConnections(data.connections);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Snowflake connections', err);
+    }
+  };
+
+  const handleAddSnowflake = async (e: FormEvent) => {
+    e.preventDefault();
+    setSnowflakeLoading(true);
+    try {
+      const res = await fetch('/api/snowflake/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snowflakeForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Snowflake connection added');
+        fetchSnowflakeConnections();
+        setSnowflakeForm({
+          account: '',
+          username: '',
+          password: '',
+          warehouse: '',
+          database: '',
+          schema: '',
+          role: '',
+        });
+      } else {
+        toast.error(data.error || 'Failed to add connection');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('An error occurred');
+    } finally {
+      setSnowflakeLoading(false);
+    }
+  };
+
+  const handleDeleteSnowflake = async (id: string) => {
+    if (!confirm('Delete this connection?')) return;
+    try {
+      const res = await fetch('/api/snowflake/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Connection deleted');
+        fetchSnowflakeConnections();
+      } else {
+        toast.error(data.error);
+      }
+    } catch (err) {
+      toast.error('Failed to delete');
+    }
+  };
 
   const handleAddOrg = async (e: FormEvent) => {
     e.preventDefault();
@@ -251,7 +324,7 @@ export default function ProfilePage() {
       if (data.success) {
         toast.success('Profile updated successfully');
         setUser(data.user);
-        refreshUser();
+        refreshProfile();
         setEditingProfile(false);
       } else {
         toast.error(data.error || 'Failed to update profile');
@@ -424,6 +497,17 @@ export default function ProfilePage() {
             setShowPassword={setShowPassword}
           />
         );
+      case 'snowflake':
+        return (
+          <SnowflakeTab
+            connections={snowflakeConnections}
+            form={snowflakeForm}
+            setForm={setSnowflakeForm}
+            onAdd={handleAddSnowflake}
+            onDelete={handleDeleteSnowflake}
+            loading={snowflakeLoading}
+          />
+        );
       case 'security':
         return (
           <SecurityTab
@@ -470,8 +554,7 @@ export default function ProfilePage() {
     <Box
       style={{
         minHeight: '100vh',
-        background:
-          'linear-gradient(135deg, #f9fafb 0%, #eff6ff 50%, #eef2ff 100%)',
+        background: 'linear-gradient(135deg, #f9fafb 0%, #eff6ff 50%, #eef2ff 100%)',
       }}
       py="xl"
       px="md"

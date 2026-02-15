@@ -1,5 +1,6 @@
 'use client';
 
+import { type Connection } from '@components/OrgHeader';
 import {
   Badge,
   Box,
@@ -18,37 +19,23 @@ import {
   Title,
 } from '@mantine/core';
 import { IconLayoutColumns, IconLayoutGrid, IconPlus } from '@tabler/icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 
 // Co-located components
 import ComparisonCard from './components/ComparisonCard';
 import ComparisonStats from './components/ComparisonStats';
 import FieldsTable from './components/FieldsTable';
-import OrgSelector from './components/OrgSelector';
+import ConnectionSelector from './components/OrgSelector';
 
-interface AvailableOrg {
-  instance_url?: string;
-  instanceUrl?: string;
-  org_name?: string;
-  orgName?: string;
-}
-
-interface Org {
-  orgName?: string;
-  org_name?: string;
-  accessToken: string | null;
-  instanceUrl: string | null;
-  instance_url?: string;
-}
-
+/* ── Types ── */
 interface ObjectOption {
   name: string;
   label: string;
 }
 
 interface Target {
-  orgKey: string;
+  orgKey: string; // connectionId
   objectName: string;
   orgLabel?: string;
 }
@@ -56,13 +43,13 @@ interface Target {
 interface Comparison {
   id: string;
   name: string;
-  sourceOrg: string;
+  sourceOrg: string; // connectionId
   sourceObject: string;
   targets: Target[];
 }
 
 interface Participant {
-  orgKey: string;
+  orgKey: string; // connectionId
   objectName: string;
   orgLabel: string;
   role: string;
@@ -87,31 +74,41 @@ interface ComparisonData {
 }
 
 export default function CompareFieldsPage() {
-  // Org state
-  const [orgs, setOrgs] = useState<Org[]>([]);
-  const [availableOrgs, setAvailableOrgs] = useState<AvailableOrg[]>([]);
+  /* ── Connection state ── */
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [selectedSlots, setSelectedSlots] = useState<(string | null)[]>([null, null]);
+
+  /* ── Data state ── */
   const [orgObjectsMap, setOrgObjectsMap] = useState<Record<string, ObjectOption[]>>({});
   const [orgsData, setOrgsData] = useState<Record<string, FieldData[]>[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Comparison state
+  /* ── Comparison state ── */
   const [comparisons, setComparisons] = useState<Comparison[]>([]);
   const [activeComparisonId, setActiveComparisonId] = useState('');
   const [fieldData, setFieldData] = useState<ComparisonData[]>([]);
 
-  // Filter state
+  /* ── Filter state ── */
   const [filter, setFilter] = useState('all');
   const [metadataOptions, setMetadataOptions] = useState<string[]>([]);
   const [selectedMetadata, setSelectedMetadata] = useState<string[]>([]);
   const [displayMode, setDisplayMode] = useState<'default' | 'separate'>('default');
   const [scrollLock, setScrollLock] = useState(false);
 
-  const validOrgs = useMemo(() => orgs.filter((org) => org.accessToken && org.instanceUrl), [orgs]);
+  /* ── Derived ── */
+  const validConnections = useMemo(
+    () =>
+      selectedSlots
+        .map((id) => (id ? (connections.find((c) => c.id === id) ?? null) : null))
+        .filter(Boolean) as Connection[],
+    [selectedSlots, connections]
+  );
 
   const orgObjectsToLoad = useMemo(() => {
     const map: Record<string, Set<string>> = {};
-    validOrgs.forEach((org) => {
-      map[org.instanceUrl!] = new Set();
+    validConnections.forEach((conn) => {
+      map[conn.id] = new Set();
     });
 
     comparisons.forEach((cmp) => {
@@ -130,48 +127,72 @@ export default function CompareFieldsPage() {
     const result: Record<string, string[]> = {};
     Object.keys(map).forEach((key) => {
       const set = map[key];
-      if (set) {
-        result[key] = Array.from(set);
-      }
+      if (set) result[key] = Array.from(set);
     });
     return result;
-  }, [validOrgs, comparisons]);
+  }, [validConnections, comparisons]);
 
-  // Initialize orgs
-  useEffect(() => {
-    const initialOrgs: Org[] = [
-      { orgName: 'Org 1', accessToken: null, instanceUrl: null },
-      { orgName: 'Org 2', accessToken: null, instanceUrl: null },
-    ];
-    setOrgs(initialOrgs);
-  }, []);
-
-  // Fetch available orgs
-  useEffect(() => {
-    const fetchOrgs = async () => {
-      try {
-        const res = await fetch('/api/listAllOrgs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await res.json();
-        if (data.success) {
-          setAvailableOrgs(data.organizations);
-        }
-      } catch (err) {
-        console.error('Error fetching orgs:', err);
+  /* ── Load connections on mount ── */
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    try {
+      const res = await fetch('/api/connections');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.connections)) {
+        setConnections(data.connections);
       }
-    };
-    fetchOrgs();
+    } catch (err) {
+      console.error('Failed to load connections', err);
+      toast.error('Failed to load connections');
+    } finally {
+      setConnectionsLoading(false);
+    }
   }, []);
 
-  // Ensure default comparison exists
+  useEffect(() => {
+    loadConnections();
+  }, [loadConnections]);
+
+  /* ── Slot management ── */
+  const addSlot = () => setSelectedSlots((prev) => [...prev, null]);
+
+  const removeSlot = (index: number) => {
+    if (selectedSlots.length > 2) {
+      setSelectedSlots((prev) => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  const selectSlot = async (index: number, connectionId: string) => {
+    if (!connectionId) return;
+    const conn = connections.find((c) => c.id === connectionId);
+    if (!conn) return;
+
+    const toastId = toast.loading(`Connecting to ${conn.display_name}…`);
+    try {
+      const res = await fetch(`/api/connections/${connectionId}`);
+      const data = await res.json();
+      if (data.success && data.connection?.healthy) {
+        setSelectedSlots((prev) => {
+          const next = [...prev];
+          next[index] = connectionId;
+          return next;
+        });
+        toast.success(`Connected to ${conn.display_name}`, { id: toastId });
+      } else {
+        toast.error(data.error || 'Connection unhealthy', { id: toastId });
+      }
+    } catch {
+      toast.error('Connection failed', { id: toastId });
+    }
+  };
+
+  /* ── Ensure default comparison exists ── */
   useEffect(() => {
     if (!comparisons.length) {
       const defaultComparison: Comparison = {
         id: 'cmp-1',
         name: 'Comparison 1',
-        sourceOrg: validOrgs[0]?.instanceUrl || '',
+        sourceOrg: validConnections[0]?.id || '',
         sourceObject: '',
         targets: [],
       };
@@ -183,11 +204,11 @@ export default function CompareFieldsPage() {
     if (!comparisons.some((cmp) => cmp.id === activeComparisonId)) {
       setActiveComparisonId(comparisons[0]!.id);
     }
-  }, [comparisons, activeComparisonId, validOrgs]);
+  }, [comparisons, activeComparisonId, validConnections]);
 
-  // Fetch objects for each org
+  /* ── Fetch objects for each connected slot ── */
   useEffect(() => {
-    if (validOrgs.length === 0) {
+    if (validConnections.length === 0) {
       setOrgObjectsMap({});
       return;
     }
@@ -196,24 +217,17 @@ export default function CompareFieldsPage() {
 
     const fetchOrgObjects = async () => {
       const results = await Promise.all(
-        validOrgs.map(async (org) => {
+        validConnections.map(async (conn) => {
           try {
-            const res = await fetch('/api/objects', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                accessToken: org.accessToken,
-                instanceUrl: org.instanceUrl,
-              }),
-            });
+            const res = await fetch(`/api/connections/${conn.id}/tables`);
             const data = await res.json();
             if (!res.ok || !data.success) {
               throw new Error(data.error || 'Failed to load objects');
             }
-            return { key: org.instanceUrl!, list: data.object || [] };
+            return { key: conn.id, list: data.tables ?? data.objects ?? [] };
           } catch (error) {
-            console.error('Error fetching objects for org:', org.instanceUrl, error);
-            return { key: org.instanceUrl!, list: [] };
+            console.error('Error fetching objects for connection:', conn.id, error);
+            return { key: conn.id, list: [] };
           }
         })
       );
@@ -235,19 +249,19 @@ export default function CompareFieldsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [validOrgs]);
+  }, [validConnections]);
 
-  // Fetch field data
+  /* ── Fetch field data ── */
   useEffect(() => {
-    if (validOrgs.length === 0) {
+    if (validConnections.length === 0) {
       setLoading(false);
       setOrgsData([]);
       setFieldData([]);
       return;
     }
 
-    const hasSelection = validOrgs.some(
-      (org) => (orgObjectsToLoad[org.instanceUrl!] || []).length > 0
+    const hasSelection = validConnections.some(
+      (conn) => (orgObjectsToLoad[conn.id] || []).length > 0
     );
 
     if (!hasSelection) {
@@ -261,19 +275,15 @@ export default function CompareFieldsPage() {
       try {
         setLoading(true);
         const responses = await Promise.all(
-          validOrgs.map(async (org) => {
-            const objects = orgObjectsToLoad[org.instanceUrl!] || [];
+          validConnections.map(async (conn) => {
+            const objects = orgObjectsToLoad[conn.id] || [];
             if (!objects.length) {
               return { success: true, data: {} };
             }
-            const res = await fetch('/api/fields', {
+            const res = await fetch(`/api/connections/${conn.id}/fields`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                accessToken: org.accessToken,
-                instanceUrl: org.instanceUrl,
-                objects,
-              }),
+              body: JSON.stringify({ objects }),
             });
             return await res.json();
           })
@@ -297,16 +307,16 @@ export default function CompareFieldsPage() {
       }
     };
     fetchFieldsData();
-  }, [validOrgs, orgObjectsToLoad]);
+  }, [validConnections, orgObjectsToLoad]);
 
-  // Build field comparison data
+  /* ── Build field comparison data ── */
   const orgDataMap = useMemo(() => {
     const map: Record<string, Record<string, FieldData[]>> = {};
-    validOrgs.forEach((org, idx) => {
-      map[org.instanceUrl!] = orgsData[idx] || {};
+    validConnections.forEach((conn, idx) => {
+      map[conn.id] = orgsData[idx] || {};
     });
     return map;
-  }, [validOrgs, orgsData]);
+  }, [validConnections, orgsData]);
 
   useEffect(() => {
     if (!comparisons.length) {
@@ -314,11 +324,8 @@ export default function CompareFieldsPage() {
       return;
     }
 
-    const orgLabelMap = Object.fromEntries(
-      validOrgs.map((org, idx) => [
-        org.instanceUrl,
-        org.orgName !== 'None' ? org.orgName : `Org ${idx + 1}`,
-      ])
+    const connLabelMap = Object.fromEntries(
+      validConnections.map((conn) => [conn.id, conn.display_name || 'Untitled'])
     );
 
     const comparisonData = comparisons.map((comparison) => {
@@ -328,7 +335,7 @@ export default function CompareFieldsPage() {
         participants.push({
           orgKey: comparison.sourceOrg,
           objectName: comparison.sourceObject,
-          orgLabel: orgLabelMap[comparison.sourceOrg] || comparison.sourceOrg,
+          orgLabel: connLabelMap[comparison.sourceOrg] || comparison.sourceOrg,
           role: 'source',
         });
       }
@@ -338,7 +345,7 @@ export default function CompareFieldsPage() {
           participants.push({
             orgKey: target.orgKey,
             objectName: target.objectName,
-            orgLabel: orgLabelMap[target.orgKey] || target.orgKey,
+            orgLabel: connLabelMap[target.orgKey] || target.orgKey,
             role: 'target',
           });
         }
@@ -382,7 +389,7 @@ export default function CompareFieldsPage() {
     });
 
     setFieldData(comparisonData);
-  }, [comparisons, orgDataMap, selectedMetadata, validOrgs]);
+  }, [comparisons, orgDataMap, selectedMetadata, validConnections]);
 
   const activeComparison = fieldData.find((f) => f.comparisonId === activeComparisonId);
   const activeParticipants = activeComparison?.participants || [];
@@ -400,25 +407,7 @@ export default function CompareFieldsPage() {
   const diffPercent = totalCount > 0 ? Math.round((differentCount / totalCount) * 100) : 0;
   const hasActiveData = !!activeComparison && activeParticipants.length >= 2;
 
-  // Handlers
-  const addOrg = () => {
-    setOrgs([...orgs, { orgName: `Org ${orgs.length + 1}`, accessToken: null, instanceUrl: null }]);
-  };
-
-  const removeOrg = (index: number) => {
-    if (orgs.length <= 2) {
-      toast.error('At least 2 organizations are required');
-      return;
-    }
-    setOrgs(orgs.filter((_, i) => i !== index));
-  };
-
-  const updateOrg = (index: number, org: Org) => {
-    const updatedOrgs = [...orgs];
-    updatedOrgs[index] = org;
-    setOrgs(updatedOrgs);
-  };
-
+  /* ── Comparison handlers ── */
   const handleComparisonChange = (
     comparisonId: string,
     updater: Partial<Comparison> | ((c: Comparison) => Comparison)
@@ -435,14 +424,14 @@ export default function CompareFieldsPage() {
   };
 
   const addComparison = () => {
-    if (!validOrgs.length) {
-      toast.error('Connect at least one org before adding comparisons');
+    if (!validConnections.length) {
+      toast.error('Connect at least one connection before adding comparisons');
       return;
     }
     const newComparison: Comparison = {
       id: `cmp-${Date.now()}`,
       name: `Comparison ${comparisons.length + 1}`,
-      sourceOrg: validOrgs[0]?.instanceUrl || '',
+      sourceOrg: validConnections[0]?.id || '',
       sourceObject: '',
       targets: [],
     };
@@ -463,20 +452,27 @@ export default function CompareFieldsPage() {
 
   const addComparisonTarget = (comparisonId: string) => {
     handleComparisonChange(comparisonId, (comparison) => {
-      // Allow same org to be selected for both source and target
-      if (!validOrgs.length) {
-        toast.error('No organizations available for target mapping');
+      if (!validConnections.length) {
+        toast.error('No connections available for target mapping');
         return comparison;
       }
       return {
         ...comparison,
-        targets: [
-          ...comparison.targets,
-          { orgKey: validOrgs[0]?.instanceUrl ?? '', objectName: '' },
-        ],
+        targets: [...comparison.targets, { orgKey: validConnections[0]?.id ?? '', objectName: '' }],
       };
     });
   };
+
+  /* ── Map validConnections for ComparisonCard ── */
+  const validConnectionsForCard = useMemo(
+    () =>
+      validConnections.map((c) => ({
+        connectionId: c.id,
+        displayName: c.display_name || 'Untitled',
+        connectionType: c.connection_type,
+      })),
+    [validConnections]
+  );
 
   return (
     <Box bg="gray.0" mih="100vh" py="lg" px="md">
@@ -491,31 +487,32 @@ export default function CompareFieldsPage() {
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Salesforce Field Comparison
+            Field Comparison
           </Title>
           <Text ta="center" c="dimmed">
             Compare fields across{' '}
-            {validOrgs.length > 0
-              ? validOrgs.map((org, idx) => (
+            {validConnections.length > 0
+              ? validConnections.map((conn, idx) => (
                   <span key={idx}>
                     <Text component="span" fw={600} c="blue">
-                      {org.orgName !== 'None' ? org.orgName : `Org ${idx + 1}`}
+                      {conn.display_name}
                     </Text>
-                    {idx < validOrgs.length - 1 && ', '}
+                    {idx < validConnections.length - 1 && ', '}
                   </span>
                 ))
-              : 'organizations'}
+              : 'connections'}
           </Text>
 
-          <OrgSelector
-            orgs={orgs}
-            availableOrgs={availableOrgs}
-            onAddOrg={addOrg}
-            onRemoveOrg={removeOrg}
-            onUpdateOrg={updateOrg}
+          <ConnectionSelector
+            connections={connections}
+            connectionsLoading={connectionsLoading}
+            selectedSlots={selectedSlots}
+            onAddSlot={addSlot}
+            onRemoveSlot={removeSlot}
+            onSelectSlot={selectSlot}
           />
 
-          {validOrgs.length >= 2 && (
+          {validConnections.length >= 2 && (
             <Paper radius="lg" p="lg" shadow="md" withBorder>
               <Stack gap="lg">
                 <Group justify="space-between">
@@ -537,19 +534,15 @@ export default function CompareFieldsPage() {
                     key={comparison.id}
                     comparison={comparison}
                     index={idx}
-                    validOrgs={validOrgs.map((org) => ({
-                      instanceUrl: org.instanceUrl!,
-                      orgName: org.orgName,
-                    }))}
+                    validConnections={validConnectionsForCard}
                     orgObjectsMap={orgObjectsMap}
                     canRemove={comparisons.length > 1}
                     onRemove={() => removeComparison(comparison.id)}
                     onNameChange={(name) => handleComparisonChange(comparison.id, { name })}
-                    onSourceOrgChange={(orgKey) =>
+                    onSourceOrgChange={(connectionId) =>
                       handleComparisonChange(comparison.id, {
-                        sourceOrg: orgKey,
+                        sourceOrg: connectionId,
                         sourceObject: '',
-                        // Keep all targets - same org comparison is allowed
                       })
                     }
                     onSourceObjectChange={(objectName) =>
@@ -562,10 +555,10 @@ export default function CompareFieldsPage() {
                         targets: c.targets.filter((_, i) => i !== targetIdx),
                       }))
                     }
-                    onTargetOrgChange={(targetIdx, orgKey) =>
+                    onTargetOrgChange={(targetIdx, connectionId) =>
                       handleComparisonChange(comparison.id, (c) => {
                         const targets = [...c.targets];
-                        targets[targetIdx] = { orgKey, objectName: '' };
+                        targets[targetIdx] = { orgKey: connectionId, objectName: '' };
                         return { ...c, targets };
                       })
                     }

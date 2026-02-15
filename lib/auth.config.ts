@@ -10,6 +10,7 @@ export interface AuthConfig {
   TOKEN_REFRESH_THRESHOLD: number;
   ACCESS_TOKEN_COOKIE: string;
   REFRESH_TOKEN_COOKIE: string;
+  SF_TOKEN_COOKIE_PREFIX: string;
 }
 
 const AUTH_CONFIG: AuthConfig = {
@@ -28,6 +29,7 @@ const AUTH_CONFIG: AuthConfig = {
   // Cookie names
   ACCESS_TOKEN_COOKIE: 'token',
   REFRESH_TOKEN_COOKIE: 'refresh_token',
+  SF_TOKEN_COOKIE_PREFIX: 'sf_token_',
 };
 
 export default AUTH_CONFIG;

@@ -105,14 +105,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Set cookies
     setAuthCookies(res, access_token, refresh_token);
 
-    // Check if user has any organization (for onboarding redirect)
-    const { count, error: orgError } = await supabase
-      .from('organizations')
+    // Check if user has any connection (for onboarding redirect)
+    const { count, error: connError } = await supabase
+      .from('connections')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id);
 
-    if (orgError) {
-      console.error('Error checking organizations:', orgError);
+    if (connError) {
+      console.error('Error checking connections:', connError);
     }
 
     return res.status(200).json({ success: true, hasOrganization: (count || 0) > 0 });

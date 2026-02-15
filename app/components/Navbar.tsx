@@ -1,33 +1,25 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
 import {
-  AppShell,
-  Group,
-  Button,
-  Menu,
-  Text,
   Avatar,
-  UnstyledButton,
   Box,
   Burger,
-  Drawer,
-  Stack,
-  NavLink,
+  Button,
   Divider,
+  Drawer,
+  Group,
+  Menu,
+  NavLink,
+  Stack,
+  Text,
   ThemeIcon,
+  UnstyledButton,
 } from '@mantine/core';
-import {
-  IconSparkles,
-  IconChevronDown,
-  IconLogout,
-  IconUser,
-  IconBolt,
-} from '@tabler/icons-react';
+import { IconBolt, IconChevronDown, IconLogout, IconSparkles, IconUser } from '@tabler/icons-react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { useAuth } from '../context/authContext';
 
 interface NavItem {
   href?: string;
@@ -40,22 +32,25 @@ interface User {
   email?: string;
 }
 
+import useUserAuthStore from '../../lib/store/userAuthStore';
+
+// ...
+
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, user, logout } = useAuth() as {
-    isAuthenticated: boolean;
-    user: User | null;
-    logout: (sessionExpired?: boolean) => Promise<void>;
-  };
+
+  // Use Zustand Store
+  const { isLoggedIn: isAuthenticated, user, profile, logout } = useUserAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
+    router.push('/login');
   };
 
-  const fullName = user?.full_name || '';
-  const userEmail = user?.email || '';
+  const fullName = profile?.full_name || user?.user_metadata?.full_name || '';
+  const userEmail = profile?.email || user?.email || '';
 
   const publicNav: NavItem[] = [
     { href: '/', label: 'Home' },
@@ -80,7 +75,7 @@ export default function Navbar() {
         { href: '/compareFields', label: 'Compare Fields' },
       ],
     },
-    { href: '/tools', label: 'Tools' },
+    { href: '/feedback', label: 'Feedback' },
     { href: '/soql', label: 'SOQL' },
   ];
 
@@ -133,7 +128,13 @@ export default function Navbar() {
               if (nav.dropdown) {
                 const isActive = nav.dropdown.some((opt) => pathname === opt.href);
                 return (
-                  <Menu key={nav.label} trigger="hover" openDelay={100} closeDelay={200} position="bottom-start">
+                  <Menu
+                    key={nav.label}
+                    trigger="hover"
+                    openDelay={100}
+                    closeDelay={200}
+                    position="bottom-start"
+                  >
                     <Menu.Target>
                       <Button
                         variant={isActive ? 'light' : 'subtle'}
@@ -150,7 +151,8 @@ export default function Navbar() {
                           component={Link}
                           href={opt.href}
                           style={{
-                            backgroundColor: pathname === opt.href ? 'var(--mantine-color-blue-0)' : undefined,
+                            backgroundColor:
+                              pathname === opt.href ? 'var(--mantine-color-blue-0)' : undefined,
                             fontWeight: pathname === opt.href ? 600 : 400,
                           }}
                         >
@@ -209,9 +211,20 @@ export default function Navbar() {
                   </UnstyledButton>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  <Box px="sm" py="xs" style={{ background: 'var(--mantine-color-blue-0)', borderRadius: 'var(--mantine-radius-sm)' }}>
-                    <Text size="sm" fw={600} truncate>{fullName || 'User'}</Text>
-                    <Text size="xs" c="dimmed" truncate>{userEmail}</Text>
+                  <Box
+                    px="sm"
+                    py="xs"
+                    style={{
+                      background: 'var(--mantine-color-blue-0)',
+                      borderRadius: 'var(--mantine-radius-sm)',
+                    }}
+                  >
+                    <Text size="sm" fw={600} truncate>
+                      {fullName || 'User'}
+                    </Text>
+                    <Text size="xs" c="dimmed" truncate>
+                      {userEmail}
+                    </Text>
                   </Box>
                   <Divider my="xs" />
                   <Menu.Item component={Link} href="/plan" leftSection={<IconBolt size={16} />}>
@@ -221,7 +234,11 @@ export default function Navbar() {
                     Profile
                   </Menu.Item>
                   <Divider my="xs" />
-                  <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={handleLogout}>
+                  <Menu.Item
+                    color="red"
+                    leftSection={<IconLogout size={16} />}
+                    onClick={handleLogout}
+                  >
                     Logout
                   </Menu.Item>
                 </Menu.Dropdown>
@@ -262,7 +279,9 @@ export default function Navbar() {
             if (nav.dropdown) {
               return (
                 <Box key={nav.label}>
-                  <Text size="sm" fw={600} c="dimmed" mb="xs">{nav.label}</Text>
+                  <Text size="sm" fw={600} c="dimmed" mb="xs">
+                    {nav.label}
+                  </Text>
                   {nav.dropdown.map((opt) => (
                     <NavLink
                       key={opt.href}

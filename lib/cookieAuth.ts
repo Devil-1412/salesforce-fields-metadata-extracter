@@ -1,6 +1,7 @@
 import { serialize } from 'cookie';
-import type { NextApiResponse, NextApiRequest } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import AUTH_CONFIG from './auth.config';
+import { decrypt, encrypt } from './encryption';
 
 type CookieSerializeOptions = Parameters<typeof serialize>[2];
 
@@ -41,7 +42,10 @@ export function setRefreshTokenCookie(
     ...options,
   };
 
-  res.setHeader('Set-Cookie', serialize(AUTH_CONFIG.REFRESH_TOKEN_COOKIE, refreshToken, cookieOptions));
+  res.setHeader(
+    'Set-Cookie',
+    serialize(AUTH_CONFIG.REFRESH_TOKEN_COOKIE, refreshToken, cookieOptions)
+  );
 }
 
 /**
@@ -138,7 +142,7 @@ export function getAuthToken(req: NextApiRequest): string | null {
 
   // 2. Fallback to Authorization header
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-    return req.headers.authorization.split(' ')[1];
+    return req.headers.authorization.split(' ')[1] || null;
   }
 
   return null;
@@ -150,4 +154,66 @@ export function getAuthToken(req: NextApiRequest): string | null {
 export function getRefreshToken(req: NextApiRequest): string | null {
   const refreshToken = req.cookies?.[AUTH_CONFIG.REFRESH_TOKEN_COOKIE];
   return refreshToken ?? null;
+}
+
+/**
+ * Generate a safe cookie key from instance URL
+ */
+function generateCookieKey(instanceUrl: string): string {
+  // Simple base64 encoding to make it cookie-safe
+  try {
+    const safeUrl = Buffer.from(instanceUrl).toString('base64').replace(/=/g, '');
+    return `${AUTH_CONFIG.SF_TOKEN_COOKIE_PREFIX}${safeUrl}`;
+  } catch (e) {
+    return `${AUTH_CONFIG.SF_TOKEN_COOKIE_PREFIX}default`;
+  }
+}
+
+/**
+ * Helper to set Salesforce access token cookie (encrypted)
+ */
+export function setSalesforceTokenCookie(
+  res: NextApiResponse,
+  token: string,
+  instanceUrl: string,
+  options: Partial<CookieSerializeOptions> = {}
+): void {
+  try {
+    const cookieName = generateCookieKey(instanceUrl);
+    // Encrypt the token before storing
+    const encryptedToken = encrypt(token);
+
+    const cookieOptions: CookieSerializeOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7200, // 2 hours (Salesforce session expiry)
+      path: '/',
+      ...options,
+    };
+
+    res.setHeader('Set-Cookie', serialize(cookieName, encryptedToken, cookieOptions));
+  } catch (err) {
+    console.error(`Failed to set Salesforce token cookie for ${instanceUrl}:`, err);
+  }
+}
+
+/**
+ * Helper to get Salesforce access token from cookie (decrypted)
+ */
+export function getSalesforceToken(req: NextApiRequest, instanceUrl: string): string | null {
+  try {
+    const cookieName = generateCookieKey(instanceUrl);
+    const encryptedToken = req.cookies?.[cookieName];
+
+    if (!encryptedToken) {
+      return null;
+    }
+
+    // Decrypt the token
+    return decrypt(encryptedToken);
+  } catch (err) {
+    console.warn(`Failed to decrypt Salesforce token for ${instanceUrl}:`, err);
+    return null;
+  }
 }

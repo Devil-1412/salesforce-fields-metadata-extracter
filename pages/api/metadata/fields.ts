@@ -1,3 +1,5 @@
+import { AuthStore } from '@lib/AuthStore';
+import { jsforceRateLimiter } from '@lib/rateLimiter';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface FieldData {
@@ -13,7 +15,7 @@ interface MetadataFieldsResponse {
   error?: string;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<MetadataFieldsResponse>) {
+async function handler(req: NextApiRequest, res: NextApiResponse<MetadataFieldsResponse>) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
@@ -21,35 +23,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   try {
     const { accessToken, instanceUrl, objectName } = req.body;
 
-    if (!accessToken || !instanceUrl || !objectName) {
+    if (!instanceUrl || !objectName) {
       return res.status(400).json({ success: false, error: 'Missing required parameters' });
     }
 
-    const response = await fetch(`${instanceUrl}/services/data/v57.0/sobjects/${objectName}/describe`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const store = new AuthStore(req, res, instanceUrl);
+    const conn = await store.getConnection();
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch fields for ${objectName}`);
-    }
+    const describe = await conn.sobject(objectName).describe();
 
-    const data = await response.json();
-
-    const fields: FieldData[] = data.fields
-      .map((field: { name: string; label: string; type: string; referenceTo?: string[] }) => ({
+    const fields: FieldData[] = describe.fields
+      .map((field) => ({
         name: field.name,
         label: field.label,
         type: field.type,
         referenceTo: field.referenceTo || [],
       }))
-      .sort((a: FieldData, b: FieldData) => a.name.localeCompare(b.name));
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     res.status(200).json({
       success: true,
-      data: { objectName: data.name, fields },
+      data: { objectName: describe.name, fields },
     });
   } catch (error) {
     console.error('Error fetching fields:', error);
@@ -59,3 +53,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     });
   }
 }
+
+export default jsforceRateLimiter(handler);

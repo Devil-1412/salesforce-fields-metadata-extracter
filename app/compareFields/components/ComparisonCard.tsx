@@ -4,9 +4,10 @@ import SearchableDropdown from '@components/SearchableDropdown';
 import { Badge, Button, Group, Paper, Select, Stack, Text, TextInput } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
-interface ValidOrg {
-  instanceUrl: string;
-  orgName?: string;
+interface ValidConnection {
+  connectionId: string;
+  displayName: string;
+  connectionType: string;
 }
 
 interface ObjectOption {
@@ -15,7 +16,7 @@ interface ObjectOption {
 }
 
 interface Target {
-  orgKey: string;
+  orgKey: string; // connectionId
   objectName: string;
   orgLabel?: string;
 }
@@ -23,7 +24,7 @@ interface Target {
 interface Comparison {
   id: string;
   name: string;
-  sourceOrg: string;
+  sourceOrg: string; // connectionId
   sourceObject: string;
   targets: Target[];
 }
@@ -31,23 +32,23 @@ interface Comparison {
 interface ComparisonCardProps {
   comparison: Comparison;
   index: number;
-  validOrgs: ValidOrg[];
+  validConnections: ValidConnection[];
   orgObjectsMap: Record<string, ObjectOption[]>;
   canRemove: boolean;
   onRemove: () => void;
   onNameChange: (name: string) => void;
-  onSourceOrgChange: (orgKey: string) => void;
+  onSourceOrgChange: (connectionId: string) => void;
   onSourceObjectChange: (objectName: string) => void;
   onAddTarget: () => void;
   onRemoveTarget: (targetIndex: number) => void;
-  onTargetOrgChange: (targetIndex: number, orgKey: string) => void;
+  onTargetOrgChange: (targetIndex: number, connectionId: string) => void;
   onTargetObjectChange: (targetIndex: number, objectName: string) => void;
 }
 
 export default function ComparisonCard({
   comparison,
   index,
-  validOrgs,
+  validConnections,
   orgObjectsMap,
   canRemove,
   onRemove,
@@ -61,15 +62,14 @@ export default function ComparisonCard({
 }: ComparisonCardProps) {
   const sourceOptions = orgObjectsMap[comparison.sourceOrg] || [];
 
-  // Deduplicate orgs by instanceUrl to prevent Mantine Select duplicate value errors
-  // This allows same org to be selected for both source and target (for comparing different objects within same org)
-  const uniqueOrgs = validOrgs.filter(
-    (org, index, self) => index === self.findIndex((o) => o.instanceUrl === org.instanceUrl)
-  );
+  const connectionSelectData = validConnections.map((c) => ({
+    value: c.connectionId,
+    label: `${c.displayName} (${c.connectionType})`,
+  }));
 
-  const getOrgLabel = (instanceUrl: string) => {
-    const org = validOrgs.find((o) => o.instanceUrl === instanceUrl);
-    return org?.orgName !== 'None' ? org?.orgName : instanceUrl.replace('https://', '');
+  const getConnectionLabel = (connectionId: string) => {
+    const conn = validConnections.find((c) => c.connectionId === connectionId);
+    return conn?.displayName ?? connectionId;
   };
 
   return (
@@ -107,10 +107,7 @@ export default function ComparisonCard({
               <Select
                 value={comparison.sourceOrg}
                 onChange={(val) => val && onSourceOrgChange(val)}
-                data={uniqueOrgs.map((org) => ({
-                  value: org.instanceUrl,
-                  label: getOrgLabel(org.instanceUrl) || org.instanceUrl,
-                }))}
+                data={connectionSelectData}
                 size="sm"
               />
               <SearchableDropdown
@@ -142,7 +139,7 @@ export default function ComparisonCard({
                   size="xs"
                   leftSection={<IconPlus size={14} />}
                   onClick={onAddTarget}
-                  disabled={!uniqueOrgs.length}
+                  disabled={!validConnections.length}
                 >
                   Add Target
                 </Button>
@@ -162,10 +159,7 @@ export default function ComparisonCard({
                           <Select
                             value={target.orgKey}
                             onChange={(val) => val && onTargetOrgChange(targetIdx, val)}
-                            data={uniqueOrgs.map((org) => ({
-                              value: org.instanceUrl,
-                              label: getOrgLabel(org.instanceUrl) || org.instanceUrl,
-                            }))}
+                            data={connectionSelectData}
                             size="xs"
                             style={{ flex: 1 }}
                           />

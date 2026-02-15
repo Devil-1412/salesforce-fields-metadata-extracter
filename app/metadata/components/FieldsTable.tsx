@@ -27,8 +27,7 @@ interface FieldsTableProps {
   fieldsData: Record<string, Field[]>;
   allMetadataKeys: string[];
   objects: SalesforceObject[];
-  token: string;
-  instanceUrl: string;
+  connectionId: string;
 }
 
 export default function FieldsTable({
@@ -37,8 +36,7 @@ export default function FieldsTable({
   fieldsData,
   allMetadataKeys,
   objects,
-  token,
-  instanceUrl,
+  connectionId,
 }: FieldsTableProps) {
   const [selectedMetadata, setSelectedMetadata] = useState<string[]>([
     'label',
@@ -201,8 +199,7 @@ export default function FieldsTable({
           <FieldDetailsPanel
             field={selectedField}
             onClose={() => setSelectedField(null)}
-            instanceUrl={instanceUrl}
-            token={token}
+            connectionId={connectionId}
             objectName={selectedObject}
           />
         </>
