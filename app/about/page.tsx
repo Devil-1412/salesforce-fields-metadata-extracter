@@ -1,55 +1,18 @@
 'use client';
 
 import {
-  IconUsers,
-  IconTarget,
-  IconBulb,
-  IconWorld,
-  IconCode,
-} from '@tabler/icons-react';
-import {
+  Box,
   Container,
-  Title,
-  Text,
   Grid,
+  Group,
+  Image,
   Paper,
   Stack,
-  Group,
+  Text,
   ThemeIcon,
-  Flex,
-  Badge,
-  Image,
-  Box,
-  Avatar,
+  Title,
 } from '@mantine/core';
-
-const teamMembers = [
-  {
-    name: 'Pushpam Agrawal',
-    role: 'Developer',
-    img: 'https://avatars.githubusercontent.com/u/000000?v=4',
-  },
-  {
-    name: 'Designer',
-    role: 'UI/UX Designer',
-    img: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png',
-  },
-  {
-    name: 'Specialist',
-    role: 'Salesforce Specialist',
-    img: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-  },
-];
-
-const techStack = [
-  'Next.js',
-  'React',
-  'Mantine UI',
-  'Node.js',
-  'Salesforce JSForce',
-  'Supabase',
-  'GCP / Firebase',
-];
+import { IconBulb, IconTarget, IconWorld } from '@tabler/icons-react';
 
 export default function AboutPage() {
   return (
@@ -75,8 +38,8 @@ export default function AboutPage() {
               About Salesforce Metadata Extractor
             </Title>
             <Text c="dimmed" size="lg" maw={600}>
-              We help Salesforce developers and admins simplify complex metadata analysis
-              — so they can focus on building amazing customer experiences.
+              We help Salesforce developers and admins simplify complex metadata analysis — so they
+              can focus on building amazing customer experiences.
             </Text>
           </Stack>
 
@@ -92,10 +55,10 @@ export default function AboutPage() {
                 </Title>
               </Group>
               <Text size="lg" c="dimmed">
-                Our mission is to make <strong>Salesforce metadata</strong> accessible,
-                visual, and actionable for every team. Whether you&apos;re comparing orgs,
-                understanding field dependencies, or validating customizations — our
-                tools streamline your workflow with precision and clarity.
+                Our mission is to make <strong>Salesforce metadata</strong> accessible, visual, and
+                actionable for every team. Whether you&apos;re comparing orgs, understanding field
+                dependencies, or validating customizations — our tools streamline your workflow with
+                precision and clarity.
               </Text>
             </Grid.Col>
             <Grid.Col span={{ base: 12, md: 6 }}>
@@ -127,13 +90,12 @@ export default function AboutPage() {
                 </Title>
                 <Text c="dimmed" mt="sm">
                   The Salesforce ecosystem is powerful but often opaque when it comes to
-                  understanding metadata. We started Salesforce Metadata Extractor with
-                  one goal — to make complex metadata structures simple to navigate,
-                  analyze, and compare.
+                  understanding metadata. We started Salesforce Metadata Extractor with one goal —
+                  to make complex metadata structures simple to navigate, analyze, and compare.
                 </Text>
                 <Text c="dimmed" mt="sm">
-                  Today, we serve hundreds of Salesforce developers, architects, and
-                  admins who trust our tools for accuracy, speed, and deep insight.
+                  Today, we serve hundreds of Salesforce developers, architects, and admins who
+                  trust our tools for accuracy, speed, and deep insight.
                 </Text>
               </Paper>
             </Grid.Col>
@@ -145,67 +107,6 @@ export default function AboutPage() {
               />
             </Grid.Col>
           </Grid>
-
-          {/* Team Section */}
-          <Stack align="center" mt="xl">
-            <Group gap="xs">
-              <ThemeIcon size="lg" variant="light" color="blue">
-                <IconUsers size={20} />
-              </ThemeIcon>
-              <Title order={2} c="blue">
-                Meet the Team
-              </Title>
-            </Group>
-            <Text c="dimmed" ta="center" maw={500}>
-              A small team of passionate developers, Salesforce enthusiasts, and data
-              engineers dedicated to simplifying your metadata journey.
-            </Text>
-
-            <Grid mt="md" justify="center">
-              {teamMembers.map((member) => (
-                <Grid.Col key={member.name} span={{ base: 12, sm: 6, md: 4 }}>
-                  <Paper
-                    radius="lg"
-                    p="lg"
-                    shadow="sm"
-                    withBorder
-                    style={{ transition: 'transform 0.2s' }}
-                  >
-                    <Stack align="center">
-                      <Avatar src={member.img} size={80} radius="xl" />
-                      <Text fw={600}>{member.name}</Text>
-                      <Text size="sm" c="blue">
-                        {member.role}
-                      </Text>
-                    </Stack>
-                  </Paper>
-                </Grid.Col>
-              ))}
-            </Grid>
-          </Stack>
-
-          {/* Tech Section */}
-          <Stack align="center" mt="xl" mb="xl">
-            <Group gap="xs">
-              <ThemeIcon size="lg" variant="light" color="blue">
-                <IconCode size={20} />
-              </ThemeIcon>
-              <Title order={2} c="blue">
-                Technology Stack
-              </Title>
-            </Group>
-            <Text c="dimmed" ta="center" maw={500}>
-              Built using modern web technologies for performance and scalability.
-            </Text>
-
-            <Flex gap="sm" wrap="wrap" justify="center" mt="md">
-              {techStack.map((tech) => (
-                <Badge key={tech} size="lg" variant="light" radius="xl">
-                  {tech}
-                </Badge>
-              ))}
-            </Flex>
-          </Stack>
         </Stack>
       </Container>
     </Box>

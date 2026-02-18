@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Container, Grid, Text, Stack, Anchor } from '@mantine/core';
+import { Anchor, Box, Container, Grid, Stack, Text } from '@mantine/core';
 
 export default function Footer() {
   return (
@@ -20,7 +20,8 @@ export default function Footer() {
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(circle at top left, rgba(255,255,255,0.15), transparent 60%)',
+          background:
+            'radial-gradient(circle at top left, rgba(255,255,255,0.15), transparent 60%)',
         }}
       />
 
@@ -90,9 +91,6 @@ export default function Footer() {
             <Stack gap="xs">
               <Text size="sm" c="blue.1">
                 📧 support@salesmeta.ai
-              </Text>
-              <Text size="sm" c="blue.1">
-                📍 India
               </Text>
             </Stack>
           </Grid.Col>
