@@ -3,6 +3,7 @@
 import { Avatar, Divider, Group, NavLink, Paper, Stack, Text } from '@mantine/core';
 import {
   IconBuilding,
+  IconCloudDataConnection,
   IconLifebuoy,
   IconLogout,
   IconSettings,
@@ -33,6 +34,7 @@ const TABS: Tab[] = [
   { id: 'profile', label: 'Profile', icon: <IconUser size={18} /> },
   { id: 'organization', label: 'Organization', icon: <IconBuilding size={18} /> },
   { id: 'snowflake', label: 'Snowflake', icon: <IconSnowflake size={18} /> },
+  { id: 'iics', label: 'Informatica IICS', icon: <IconCloudDataConnection size={18} /> },
   { id: 'security', label: 'Security', icon: <IconShield size={18} /> },
   { id: 'preferences', label: 'Preferences', icon: <IconSettings size={18} /> },
   { id: 'support', label: 'Support', icon: <IconLifebuoy size={18} /> },

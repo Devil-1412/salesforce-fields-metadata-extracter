@@ -77,6 +77,7 @@ export default function Navbar() {
     },
     { href: '/feedback', label: 'Feedback' },
     { href: '/soql', label: 'SOQL' },
+    { href: '/iics', label: 'IICS' },
   ];
 
   const navLinks = isAuthenticated ? privateNav : publicNav;

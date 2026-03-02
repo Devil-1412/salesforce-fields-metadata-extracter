@@ -21,6 +21,10 @@ const TYPE_STYLE: Record<string, { gradient: string; badge: string }> = {
     gradient: 'linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #0369a1 100%)',
     badge: 'cyan',
   },
+  iics: {
+    gradient: 'linear-gradient(135deg, #ea580c 0%, #f97316 50%, #c2410c 100%)',
+    badge: 'orange',
+  },
 };
 
 const DEFAULT_STYLE = {

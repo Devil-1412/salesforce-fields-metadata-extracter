@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 import useUserAuthStore from '../../lib/store/userAuthStore';
 
 // Co-located components
+import { IICSFormData } from './components/IICSForm';
+import IICSTab, { IICSConnection } from './components/IICSTab';
 import OrganizationTab from './components/OrganizationTab';
 import PreferencesTab from './components/PreferencesTab';
 import ProfileSidebar from './components/ProfileSidebar';
@@ -93,6 +95,13 @@ export default function ProfilePage() {
     role: '',
   });
   const [snowflakeLoading, setSnowflakeLoading] = useState(false);
+  const [iicsConnections, setIicsConnections] = useState<IICSConnection[]>([]);
+  const [iicsForm, setIicsForm] = useState<IICSFormData>({
+    username: '',
+    password: '',
+    podRegion: '',
+  });
+  const [iicsLoading, setIicsLoading] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({
@@ -179,6 +188,7 @@ export default function ProfilePage() {
     // Ensure profile is up to date
     refreshProfile();
     fetchSnowflakeConnections();
+    fetchIicsConnections();
   }, []);
 
   const fetchSnowflakeConnections = async () => {
@@ -241,6 +251,68 @@ export default function ProfilePage() {
       if (data.success) {
         toast.success('Connection deleted');
         fetchSnowflakeConnections();
+      } else {
+        toast.error(data.error);
+      }
+    } catch (err) {
+      toast.error('Failed to delete');
+    }
+  };
+
+  // ── IICS Handlers ──
+
+  const fetchIicsConnections = async () => {
+    try {
+      const res = await fetch('/api/iics/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIicsConnections(data.connections);
+      }
+    } catch (err) {
+      console.error('Failed to fetch IICS connections', err);
+    }
+  };
+
+  const handleAddIics = async (e: FormEvent) => {
+    e.preventDefault();
+    setIicsLoading(true);
+    try {
+      const res = await fetch('/api/iics/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(iicsForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('IICS connection added');
+        fetchIicsConnections();
+        setIicsForm({ username: '', password: '', podRegion: '' });
+      } else {
+        toast.error(data.error || 'Failed to add IICS connection');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('An error occurred');
+    } finally {
+      setIicsLoading(false);
+    }
+  };
+
+  const handleDeleteIics = async (id: string) => {
+    if (!confirm('Delete this IICS connection?')) return;
+    try {
+      const res = await fetch('/api/iics/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('IICS connection deleted');
+        fetchIicsConnections();
       } else {
         toast.error(data.error);
       }
@@ -506,6 +578,17 @@ export default function ProfilePage() {
             onAdd={handleAddSnowflake}
             onDelete={handleDeleteSnowflake}
             loading={snowflakeLoading}
+          />
+        );
+      case 'iics':
+        return (
+          <IICSTab
+            connections={iicsConnections}
+            form={iicsForm}
+            setForm={setIicsForm}
+            onAdd={handleAddIics}
+            onDelete={handleDeleteIics}
+            loading={iicsLoading}
           />
         );
       case 'security':

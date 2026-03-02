@@ -1077,13 +1077,13 @@ ENCRYPTION_KEY=64-character-hex-string
 ### Making Authenticated Requests
 
 ```javascript
-const token = localStorage.getItem("token");
+const token = localStorage.getItem('token');
 
-fetch("/api/objects", {
-  method: "POST",
+fetch('/api/objects', {
+  method: 'POST',
   headers: {
     Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
   body: JSON.stringify({
     accessToken: sfAccessToken,
@@ -1114,10 +1114,81 @@ if (response.status === 429) {
 ### Checking Rate Limit Status
 
 ```javascript
-const remaining = response.headers.get("X-RateLimit-Remaining");
-const limit = response.headers.get("X-RateLimit-Limit");
+const remaining = response.headers.get('X-RateLimit-Remaining');
+const limit = response.headers.get('X-RateLimit-Limit');
 console.log(`${remaining}/${limit} requests remaining`);
 ```
+
+---
+
+## IICS Mappings APIs
+
+### GET `/api/connections/[id]/metadata?object=_&type=mappings`
+
+**Purpose**: List all IICS mappings for a connection
+
+**Auth Required**: Yes (httpOnly cookie)
+
+**Query Parameters**:
+
+- `object` — Required (use `_` as placeholder)
+- `type` — Required, must be `mappings`
+
+**Response** (200):
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "N0A1700000000001J",
+      "name": "my_mapping",
+      "description": "Loads data from source to target",
+      "path": "/Default/my_mapping",
+      "type": "Mapping",
+      "createTime": "2024-01-01T00:00:00.000Z",
+      "updateTime": "2024-06-15T10:30:00.000Z",
+      "createdBy": "admin@company.com",
+      "updatedBy": "admin@company.com"
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/connections/[id]/mapping-detail?mappingId=<id>`
+
+**Purpose**: Get full detail for a specific IICS mapping
+
+**Auth Required**: Yes (httpOnly cookie)
+
+**Query Parameters**:
+
+- `mappingId` — Required, the IICS mapping ID
+
+**Response** (200):
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "N0A1700000000001J",
+    "name": "my_mapping",
+    "description": "Loads data from source to target",
+    "createdBy": "admin@company.com",
+    "createTime": "2024-01-01T00:00:00.000Z",
+    "updatedBy": "admin@company.com",
+    "updateTime": "2024-06-15T10:30:00.000Z",
+    "sources": [],
+    "targets": [],
+    "transformations": [],
+    "parameters": []
+  }
+}
+```
+
+**Notes**: Only available for IICS connections. Returns 400 for non-IICS connections.
 
 ---
 

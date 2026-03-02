@@ -40,3 +40,13 @@ yarn-error.log*
 out/
 .agent/
 .vscode/
+build_error.log
+lint_log.txt
+lint_output_log.txt
+lint_output.txt
+SECURITY.md
+snowflake.log
+SUPABASE_IICS_MIGRATION.sql
+SUPABASE_OAUTH_MIGRATION.sql
+API_DOCUMENTATION.md
+
