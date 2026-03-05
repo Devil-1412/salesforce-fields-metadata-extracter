@@ -9,7 +9,10 @@ import {
   Container,
   Group,
   Loader,
+  Modal,
   Paper,
+  ScrollArea,
+  Select,
   Stack,
   Tabs,
   Text,
@@ -24,13 +27,16 @@ import {
   IconDatabase,
   IconMap,
   IconServer,
+  IconShieldCheck,
   IconTransform,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
+import DynamicDetail from './components/DynamicDetail';
 import MappingDetailModal from './components/MappingDetailModal';
 import ObjectDetailModal from './components/ObjectDetailModal';
+import PermissionsDetailModal from './components/PermissionsDetailModal';
 import RuntimeDetailModal from './components/RuntimeDetailModal';
 import StatCard from './components/StatCard';
 import TaskflowDetailModal from './components/TaskflowDetailModal';
@@ -43,6 +49,7 @@ const TABS = [
   { value: 'schedules', label: 'Schedules', icon: IconCalendarEvent },
   { value: 'runtimeEnvironments', label: 'Runtime Environments', icon: IconServer },
   { value: 'auditLogs', label: 'Audit Logs', icon: IconClipboardList },
+  { value: 'permissions', label: 'Permissions', icon: IconShieldCheck },
 ] as const;
 
 type TabValue = (typeof TABS)[number]['value'];
@@ -66,6 +73,8 @@ export default function IICSPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [runtimeEnvs, setRuntimeEnvs] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [permissionsObjects, setPermissionsObjects] = useState<any[]>([]);
+  const [permissionObjectType, setPermissionObjectType] = useState<string | null>(null);
 
   // Loading state per tab
   const [tabLoading, setTabLoading] = useState<Record<string, boolean>>({});
@@ -93,6 +102,17 @@ export default function IICSPage() {
   const [runtimeLoading, setRuntimeLoading] = useState(false);
   const [selectedRuntime, setSelectedRuntime] = useState<any>(null);
   const [runtimeDetail, setRuntimeDetail] = useState<any>(null);
+
+  // ── Permissions Detail Modal state ──
+  const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
+  const [selectedPermissionObject, setSelectedPermissionObject] = useState<any>(null);
+  const [permissionsDetail, setPermissionsDetail] = useState<any>(null);
+
+  // ── Data Viewer Modal state (for viewing full object/array data in any cell) ──
+  const [dataViewerOpen, setDataViewerOpen] = useState(false);
+  const [dataViewerTitle, setDataViewerTitle] = useState('');
+  const [dataViewerContent, setDataViewerContent] = useState<any>(null);
 
   // ── Load connections (IICS only) ──
 
@@ -123,6 +143,7 @@ export default function IICSPage() {
     setSchedules([]);
     setRuntimeEnvs([]);
     setAuditLogs([]);
+    setPermissionsObjects([]);
     setActiveTab(null);
   }, [selectedConnectionId]);
 
@@ -141,6 +162,7 @@ export default function IICSPage() {
           schedules,
           runtimeEnvironments: runtimeEnvs,
           auditLogs,
+          permissions: permissionsObjects,
         }[tab];
         if (existing && (existing as any[]).length > 0) return;
       }
@@ -167,6 +189,13 @@ export default function IICSPage() {
             break;
           case 'auditLogs':
             url = `/api/connections/${selectedConnectionId}/metadata?object=_&type=auditLogs`;
+            break;
+          case 'permissions':
+            if (!permissionObjectType) {
+              setTabLoading((prev) => ({ ...prev, [tab]: false }));
+              return;
+            }
+            url = `/api/connections/${selectedConnectionId}/iics/objects?type=${encodeURIComponent(permissionObjectType)}`;
             break;
         }
 
@@ -196,6 +225,9 @@ export default function IICSPage() {
           case 'auditLogs':
             setAuditLogs(json.data || []);
             break;
+          case 'permissions':
+            setPermissionsObjects(json.data || []);
+            break;
         }
       } catch (err: any) {
         toast.error(`Failed to fetch ${tab}: ${err.message}`);
@@ -203,10 +235,19 @@ export default function IICSPage() {
         setTabLoading((prev) => ({ ...prev, [tab]: false }));
       }
     },
-    [selectedConnectionId, objects, mappings, tasks, schedules, runtimeEnvs, auditLogs]
+    [
+      selectedConnectionId,
+      objects,
+      mappings,
+      tasks,
+      schedules,
+      runtimeEnvs,
+      auditLogs,
+      permissionsObjects,
+      permissionObjectType,
+    ]
   );
 
-  // Fetch active tab data when tab changes (cached — won't re-fetch if data exists)
   useEffect(() => {
     if (selectedConnectionId && activeTab) {
       fetchTabData(activeTab);
@@ -338,6 +379,39 @@ export default function IICSPage() {
     [selectedConnectionId]
   );
 
+  // ── Permissions click handler ──
+
+  const handlePermissionClick = useCallback(
+    async (obj: any) => {
+      if (!selectedConnectionId) return;
+
+      setSelectedPermissionObject(obj);
+      setPermissionsDetail(null);
+      setPermissionsModalOpen(true);
+      setPermissionsLoading(true);
+
+      try {
+        console.log(obj);
+        const objectId = obj.id;
+        const res = await fetch(
+          `/api/connections/${selectedConnectionId}/iics/permissions?objectId=${encodeURIComponent(objectId)}`
+        );
+        const json = await res.json();
+
+        if (json.success) {
+          setPermissionsDetail(json.data);
+        } else {
+          toast.error(json.error || 'Failed to fetch permissions');
+        }
+      } catch (err: any) {
+        toast.error(`Failed to fetch permissions: ${err.message}`);
+      } finally {
+        setPermissionsLoading(false);
+      }
+    },
+    [selectedConnectionId, permissionObjectType]
+  );
+
   // ── Dynamic column generation ──
 
   /** Convert camelCase/snake_case keys to Title Case headers */
@@ -427,6 +501,23 @@ export default function IICSPage() {
           );
         }
 
+        // Clickable name/id column for permissions
+        if ((key === 'name' || key === 'id') && tab === 'permissions') {
+          col.Cell = ({ row }: any) => (
+            <UnstyledButton
+              onClick={() => handlePermissionClick(row.original)}
+              style={{
+                color: 'var(--mantine-color-blue-7)',
+                fontWeight: 400,
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              {row.original[key]}
+            </UnstyledButton>
+          );
+        }
+
         // Format date/time columns
         if (
           key.toLowerCase().includes('time') ||
@@ -463,23 +554,50 @@ export default function IICSPage() {
           };
         }
 
-        // Skip rendering complex objects/arrays inline — show count or type
+        // Skip rendering complex objects/arrays inline — clickable to open detail modal
         const sample = data.find((d) => d[key] != null)?.[key];
         if (sample && typeof sample === 'object') {
           col.Cell =
             col.Cell ||
             (({ row }: any) => {
               const val = row.original[key];
-              if (Array.isArray(val)) return `[${val.length} items]`;
-              if (val && typeof val === 'object') return JSON.stringify(val).slice(0, 80) + '…';
-              return String(val ?? '—');
+              if (!val) return '—';
+
+              const label = Array.isArray(val)
+                ? `${val.length} item${val.length !== 1 ? 's' : ''}`
+                : 'View details';
+
+              return (
+                <UnstyledButton
+                  onClick={() => {
+                    setDataViewerTitle(
+                      `${toHeader(key)} — ${row.original.name || row.original.id || ''}`
+                    );
+                    setDataViewerContent(val);
+                    setDataViewerOpen(true);
+                  }}
+                  style={{
+                    color: 'var(--mantine-color-blue-7)',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {label}
+                </UnstyledButton>
+              );
             });
         }
 
         return col;
       });
     },
-    [handleObjectClick, handleMappingClick, handleTaskflowClick, handleRuntimeClick]
+    [
+      handleObjectClick,
+      handleMappingClick,
+      handleTaskflowClick,
+      handleRuntimeClick,
+      handlePermissionClick,
+    ]
   );
 
   // ── Render helpers ──
@@ -491,6 +609,7 @@ export default function IICSPage() {
     schedules,
     runtimeEnvironments: runtimeEnvs,
     auditLogs,
+    permissions: permissionsObjects,
   };
 
   return (
@@ -573,6 +692,35 @@ export default function IICSPage() {
                 const columns = generateDynamicColumns(tabData, tab.value);
                 return (
                   <Tabs.Panel key={tab.value} value={tab.value}>
+                    {tab.value === 'permissions' && (
+                      <Group mb="md" mt="xs">
+                        <Select
+                          label="Filter by Object Type"
+                          placeholder="Select Object Type"
+                          value={permissionObjectType}
+                          onChange={(v) => {
+                            setPermissionObjectType(v);
+                            setPermissionsObjects([]);
+                          }}
+                          data={[
+                            'Project',
+                            'Folder',
+                            'MAPPING',
+                            'MTT',
+                            'DSS',
+                            'TASKFLOW',
+                            'Connection',
+                            'RuntimeEnvironment',
+                            'Agent',
+                            'Role',
+                            'User',
+                            'UserGroup',
+                          ]}
+                          searchable
+                          allowDeselect={true}
+                        />
+                      </Group>
+                    )}
                     {tabLoading[tab.value] ? (
                       <Center py="xl">
                         <Stack align="center" gap="sm">
@@ -661,6 +809,46 @@ export default function IICSPage() {
         selectedRuntime={selectedRuntime}
         runtimeDetail={runtimeDetail}
       />
+
+      <PermissionsDetailModal
+        opened={permissionsModalOpen}
+        onClose={() => {
+          setPermissionsModalOpen(false);
+          setSelectedPermissionObject(null);
+          setPermissionsDetail(null);
+        }}
+        loading={permissionsLoading}
+        selectedObject={selectedPermissionObject}
+        permissionsDetail={permissionsDetail}
+      />
+
+      {/* Data Viewer Modal — shows full object/array data from any cell */}
+      <Modal
+        opened={dataViewerOpen}
+        onClose={() => {
+          setDataViewerOpen(false);
+          setDataViewerContent(null);
+          setDataViewerTitle('');
+        }}
+        title={dataViewerTitle || 'Data Details'}
+        size="xl"
+        centered
+      >
+        <ScrollArea.Autosize mah="70vh" offsetScrollbars>
+          {dataViewerContent &&
+            (Array.isArray(dataViewerContent) ? (
+              dataViewerContent.length > 0 && typeof dataViewerContent[0] === 'object' ? (
+                <DynamicDetail data={{ items: dataViewerContent }} />
+              ) : (
+                <Text size="sm">{dataViewerContent.map(String).join(', ')}</Text>
+              )
+            ) : typeof dataViewerContent === 'object' ? (
+              <DynamicDetail data={dataViewerContent} />
+            ) : (
+              <Text size="sm">{String(dataViewerContent)}</Text>
+            ))}
+        </ScrollArea.Autosize>
+      </Modal>
     </Container>
   );
 }

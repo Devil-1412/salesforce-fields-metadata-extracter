@@ -364,6 +364,45 @@ export class IICSProvider implements ConnectionProvider {
     return 0;
   }
 
+  // ── Permissions and Objects by Type ──
+
+  async getObjectsByType(connectionId: string, userId: string, objectType: string): Promise<any[]> {
+    let endpoint = `/public/core/v3/objects?q=type=='${encodeURIComponent(objectType)}'`;
+
+    // User, UserGroup, and Role require distinct V2 API endpoints instead of standard V3 querying.
+    if (objectType === 'User') {
+      endpoint = '/api/v2/user';
+    } else if (objectType === 'UserGroup') {
+      endpoint = '/api/v2/usergroup';
+    } else if (objectType === 'Role') {
+      endpoint = '/api/v2/role';
+    }
+
+    try {
+      const data: any = await iicsGet(connectionId, userId, endpoint);
+      // V3 returns { objects: [] }, V2 usually returns an array directly.
+      if (Array.isArray(data)) return data;
+      return Array.isArray(data?.objects) ? data.objects : [];
+    } catch (err: any) {
+      console.error(
+        '[IICSProvider getObjectsByType] Failed to fetch',
+        objectType,
+        ':',
+        err?.message || err
+      );
+      return [];
+    }
+  }
+
+  async getPermissions(connectionId: string, userId: string, objectId: string): Promise<any[]> {
+    const data: any = await iicsGet(
+      connectionId,
+      userId,
+      `/public/core/v3/objects/${encodeURIComponent(objectId)}/permissions`
+    );
+    return Array.isArray(data) ? data : [];
+  }
+
   // ── Detailed fields ──
   // Returns object dependencies as field-like data
 
