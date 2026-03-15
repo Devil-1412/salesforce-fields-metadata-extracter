@@ -1,0 +1,89 @@
+{
+  "name": "oracle-desktop-agent",
+  "version": "1.0.0",
+  "description": "Secure Local Agent for querying Enterprise Oracle Databases",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "dev:renderer": "vite",
+    "dev:main": "tsc -p tsconfig.main.json --watch",
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "build:renderer": "vite build",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build": "npm run build:main && npm run build:renderer",
+    "start": "electron .",
+    "package": "npm run build && electron-builder --win --mac --linux",
+    "package:win": "npm run build && electron-builder --win nsis portable --x64",
+    "package:win:x64": "npm run build && electron-builder --win nsis portable --x64",
+    "package:win:arm64": "npm run build && electron-builder --win nsis portable --arm64",
+    "package:win:all": "npm run build && electron-builder --win nsis portable --x64 --arm64"
+  },
+  "build": {
+    "appId": "com.saas.oracle-agent",
+    "productName": "Oracle Connector Agent",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "verifyUpdateCodeSignature": false,
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns"
+    }
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "electron-updater": "^6.3.9",
+    "oracledb": "^6.3.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/ws": "^8.5.10",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10",
+    "wait-on": "^7.2.0"
+  }
+}

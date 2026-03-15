@@ -18,6 +18,8 @@ import SecurityTab from './components/SecurityTab';
 import { SnowflakeFormData } from './components/SnowflakeForm';
 import SnowflakeTab, { SnowflakeConnection } from './components/SnowflakeTab';
 import SupportTab from './components/SupportTab';
+import OracleTab, { OracleConnection } from './components/OracleTab';
+import { OracleFormData } from './components/OracleForm';
 
 interface User {
   email?: string;
@@ -102,6 +104,9 @@ export default function ProfilePage() {
     podRegion: '',
   });
   const [iicsLoading, setIicsLoading] = useState(false);
+  const [oracleConnections, setOracleConnections] = useState<OracleConnection[]>([]);
+  const [oracleForm, setOracleForm] = useState<OracleFormData>({ display_name: '', agent_id: '' });
+  const [oracleLoading, setOracleLoading] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [preferences, setPreferences] = useState<Preferences>({
@@ -189,6 +194,7 @@ export default function ProfilePage() {
     refreshProfile();
     fetchSnowflakeConnections();
     fetchIicsConnections();
+    fetchOracleConnections();
   }, []);
 
   const fetchSnowflakeConnections = async () => {
@@ -318,6 +324,63 @@ export default function ProfilePage() {
       }
     } catch (err) {
       toast.error('Failed to delete');
+    }
+  };
+
+  // ── Oracle Handlers ──
+
+  const fetchOracleConnections = async () => {
+    try {
+      const res = await fetch('/api/connections/oracle');
+      const data = await res.json();
+      if (data.success && data.connections) {
+        setOracleConnections(data.connections);
+      }
+    } catch (err) {
+      console.error('Failed to fetch Oracle connections', err);
+    }
+  };
+
+  const handleAddOracle = async (e: FormEvent) => {
+    e.preventDefault();
+    setOracleLoading(true);
+    try {
+      const res = await fetch('/api/connections/oracle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(oracleForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Oracle connection added');
+        fetchOracleConnections();
+        setOracleForm({ display_name: '', agent_id: '' });
+      } else {
+        toast.error(data.error || 'Failed to add Oracle connection');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('An error occurred');
+    } finally {
+      setOracleLoading(false);
+    }
+  };
+
+  const handleDeleteOracle = async (id: string) => {
+    if (!confirm('Delete this Oracle connection?')) return;
+    try {
+      const res = await fetch(`/api/connections/${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Oracle connection deleted');
+        fetchOracleConnections();
+      } else {
+        toast.error(data.error);
+      }
+    } catch (err) {
+      toast.error('Failed to delete Oracle connection');
     }
   };
 
@@ -589,6 +652,17 @@ export default function ProfilePage() {
             onAdd={handleAddIics}
             onDelete={handleDeleteIics}
             loading={iicsLoading}
+          />
+        );
+      case 'oracle':
+        return (
+          <OracleTab
+            connections={oracleConnections}
+            form={oracleForm}
+            setForm={setOracleForm}
+            onAdd={handleAddOracle}
+            onDelete={handleDeleteOracle}
+            loading={oracleLoading}
           />
         );
       case 'security':

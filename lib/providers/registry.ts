@@ -12,9 +12,14 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { IICSProvider } from './IICSProvider';
 import { SalesforceProvider } from './SalesforceProvider';
 import { SnowflakeProvider } from './SnowflakeProvider';
+import { OracleProvider } from './OracleProvider';
 import type { ConnectionProvider } from './types';
 
-const STATIC_PROVIDERS: ConnectionProvider[] = [new SnowflakeProvider(), new IICSProvider()];
+const STATIC_PROVIDERS: ConnectionProvider[] = [
+  new SnowflakeProvider(), 
+  new IICSProvider(),
+  new OracleProvider()
+];
 
 /**
  * Returns the correct provider for the given connection type.

@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import toast from 'react-hot-toast';
+import { getPublicAppUrl } from '../utils/getPublicAppUrl';
 import { supabase } from '../utils/supabase';
 
 export default function SignupPage() {
@@ -178,10 +179,11 @@ export default function SignupPage() {
                   leftSection={<GoogleIcon />}
                   onClick={async () => {
                     try {
+                      const redirectTo = `${getPublicAppUrl()}/auth/callback`;
                       const { error } = await supabase.auth.signInWithOAuth({
                         provider: 'google',
                         options: {
-                          redirectTo: `${window.location.origin}/auth/callback`,
+                          redirectTo,
                         },
                       });
                       if (error) throw error;

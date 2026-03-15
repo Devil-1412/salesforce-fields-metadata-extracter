@@ -10,6 +10,7 @@
     "start": "next start",
     "serve": "npm run build && npm start",
     "lint": "next lint",
+    "sync:oracle-agent-downloads": "node scripts/syncOracleAgentDownloads.mjs",
     "update-mantine": "npx npm-check-updates @mantine/* @mantinex/* postcss-preset-mantine -u",
     "json-server-home": "npx json-server -p 4000 ./src/app/api/home.json",
     "json-server-destination": "npx json-server -p 4001 ./src/app/api/destinations.json"
@@ -49,6 +50,7 @@
     "react-simple-code-editor": "^0.14.1",
     "snowflake-sdk": "^2.3.3",
     "uuid": "^13.0.0",
+    "ws": "^8.19.0",
     "zod": "^4.3.5",
     "zustand": "^5.0.11"
   },
@@ -58,6 +60,7 @@
     "@types/jsforce": "^1.11.6",
     "@types/node": "^25.0.9",
     "@types/react": "^19.2.8",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
     "eslint-config-prettier": "^10.1.8",

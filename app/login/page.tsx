@@ -24,6 +24,7 @@ import { FormEvent, Suspense, useState } from 'react';
 import toast from 'react-hot-toast';
 import { GoogleIcon } from '../components/GoogleIcon';
 import { useAuth } from '../context/authContext';
+import { getPublicAppUrl } from '../utils/getPublicAppUrl';
 import { supabase } from '../utils/supabase';
 
 function LoginForm() {
@@ -157,10 +158,11 @@ function LoginForm() {
                 leftSection={<GoogleIcon />}
                 onClick={async () => {
                   try {
+                    const redirectTo = `${getPublicAppUrl()}/auth/callback`;
                     const { error } = await supabase.auth.signInWithOAuth({
                       provider: 'google',
                       options: {
-                        redirectTo: `${window.location.origin}/auth/callback`,
+                        redirectTo,
                       },
                     });
                     if (error) throw error;

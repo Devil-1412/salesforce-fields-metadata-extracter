@@ -19,6 +19,30 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 const DEFAULT_LIMIT = 250;
 const MAX_LIMIT = 2000;
 
+function applyPagination(query: string, connectionType: string, limit: number, offset: number) {
+  let paginatedQuery = query.trimEnd().replace(/;+$/, '');
+  const upperQuery = paginatedQuery.toUpperCase();
+
+  if (connectionType === 'oracle') {
+    if (!upperQuery.includes(' FETCH ') && !upperQuery.includes(' OFFSET ')) {
+      paginatedQuery += ` OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY`;
+    } else if (!upperQuery.includes(' FETCH ')) {
+      paginatedQuery += ` FETCH NEXT ${limit} ROWS ONLY`;
+    }
+
+    return paginatedQuery;
+  }
+
+  if (!upperQuery.includes('LIMIT')) {
+    paginatedQuery += ` LIMIT ${limit}`;
+  }
+  if (!upperQuery.includes('OFFSET') && offset > 0) {
+    paginatedQuery += ` OFFSET ${offset}`;
+  }
+
+  return paginatedQuery;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -38,20 +62,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const validation = validateReadOnly(query);
   if (!validation.safe) {
     return res.status(400).json({ success: false, error: validation.error });
-  }
-
-  // ── Pagination: inject LIMIT/OFFSET if not present ──
-  const pageLimit = Math.min(Math.max(1, Number(limit) || DEFAULT_LIMIT), MAX_LIMIT);
-  const pageOffset = Math.max(0, Number(offset) || 0);
-
-  let paginatedQuery = query.trimEnd().replace(/;+$/, '');
-  const upperQuery = paginatedQuery.toUpperCase();
-
-  if (!upperQuery.includes('LIMIT')) {
-    paginatedQuery += ` LIMIT ${pageLimit}`;
-  }
-  if (!upperQuery.includes('OFFSET') && pageOffset > 0) {
-    paginatedQuery += ` OFFSET ${pageOffset}`;
   }
 
   try {
@@ -77,6 +87,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (connError || !connection) {
       return res.status(404).json({ success: false, error: 'Connection not found' });
     }
+
+    const pageLimit = Math.min(Math.max(1, Number(limit) || DEFAULT_LIMIT), MAX_LIMIT);
+    const pageOffset = Math.max(0, Number(offset) || 0);
+    const paginatedQuery = applyPagination(query, connection.connection_type, pageLimit, pageOffset);
 
     const provider = getProvider(connection.connection_type, req, res);
     const result = await provider.executeQuery(id, user.id, paginatedQuery);

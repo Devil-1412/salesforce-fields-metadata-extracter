@@ -4,6 +4,7 @@ import { Avatar, Divider, Group, NavLink, Paper, Stack, Text } from '@mantine/co
 import {
   IconBuilding,
   IconCloudDataConnection,
+  IconDatabase,
   IconLifebuoy,
   IconLogout,
   IconSettings,
@@ -35,6 +36,7 @@ const TABS: Tab[] = [
   { id: 'organization', label: 'Organization', icon: <IconBuilding size={18} /> },
   { id: 'snowflake', label: 'Snowflake', icon: <IconSnowflake size={18} /> },
   { id: 'iics', label: 'Informatica IICS', icon: <IconCloudDataConnection size={18} /> },
+  { id: 'oracle', label: 'Oracle', icon: <IconDatabase size={18} /> },
   { id: 'security', label: 'Security', icon: <IconShield size={18} /> },
   { id: 'preferences', label: 'Preferences', icon: <IconSettings size={18} /> },
   { id: 'support', label: 'Support', icon: <IconLifebuoy size={18} /> },

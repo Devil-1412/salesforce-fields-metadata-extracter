@@ -1,0 +1,10 @@
+This is a placeholder for the Oracle Desktop Agent macOS image.
+In this development environment, the actual binary has not been built yet.
+
+To run the agent locally for testing:
+1. Open a new terminal
+2. Navigate to the `oracle-desktop-agent` directory in this repository
+3. Run `npm install`
+4. Run `npm start`
+
+To actually build the executable for distribution, run `npm run package` in that directory.
