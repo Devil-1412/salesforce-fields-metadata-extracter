@@ -8,5 +8,5 @@ export function getPublicAppUrl() {
     return window.location.origin.replace(/\/+$/, '');
   }
 
-  return 'http://localhost:3000';
+  return 'https://salesforce-fields-metadata-extracte-three.vercel.app';
 }
