@@ -29,7 +29,9 @@ export interface AgentStatus {
 }
 
 function getBackendUrl() {
-  return process.env.AGENT_BACKEND_URL || 'http://localhost:3000';
+  return (
+    process.env.AGENT_BACKEND_URL || 'https://salesforce-fields-metadata-extracte-three.vercel.app'
+  );
 }
 
 function byteLength(value: unknown) {
@@ -201,7 +203,10 @@ export class AgentCore {
       throw new Error('Only read-only Oracle queries are allowed');
     }
 
-    if (typeof connection.getStatementInfo === 'function' && oracledb?.STMT_TYPE_SELECT !== undefined) {
+    if (
+      typeof connection.getStatementInfo === 'function' &&
+      oracledb?.STMT_TYPE_SELECT !== undefined
+    ) {
       const statementInfo = await connection.getStatementInfo(trimmed);
       if (statementInfo.statementType !== oracledb.STMT_TYPE_SELECT) {
         throw new Error('Only SELECT statements may be executed by the Oracle desktop agent');

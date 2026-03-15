@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const clientSecret = process.env.SALESFORCE_CLIENT_SECRET;
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/salesforce/callback`;
+    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/salesforce/callback`;
 
     const oauth2 = new jsforce.OAuth2({
       clientId,
